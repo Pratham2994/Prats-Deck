@@ -85,6 +85,7 @@ static void chooseNext(uint32_t now) {
   add(SUNBATHE, d.window && E.sunny() && P.energy < 85 ? 2 : 0);
   add(WINDOWWATCH, d.window ? (E.wet() ? 2.0f : 0.7f) : (!E.night() && !E.wet() ? 1.0f : 0));
   add(LAPTOP, pcBusy ? 4 : 0);
+  add(DANCING, pcMusic ? 3.5f : 0);
   add(DRINK, living ? (P.hunger < 70 ? 1.2f : 0.5f) : 0);
   add(CLIMB, living ? 1.0f : 0);
   add(SCRATCH, living ? (P.fun < 80 ? 1.0f : 0.4f) : 0);
@@ -114,6 +115,7 @@ static void chooseNext(uint32_t now) {
     case CLIMB: setAct(CLIMB, frand(14, 24)); break;
     case BEDLOAF: setAct(BEDLOAF, frand(12, 22)); break;
     case PLANTCHEW: setAct(PLANTCHEW, 4); C.aux = random(0, 2); break;
+    case DANCING: setAct(DANCING, frand(9, 15)); C.aux = 0; break;
     default: setAct(pick, 30);
   }
 }
@@ -708,6 +710,24 @@ static void behave(float dt, uint32_t now) {
       C.happy = true;
       if (C.hop <= 0 && C.t < 1.1f) hopUp(240);
       if (C.t > C.dur) setAct(IDLE, 3);
+      break;
+    case DANCING:                              // a song plays on the PC: she bobs along to it
+      if (C.stage == 0) {
+        say("la la la", IC_HEART, 1600);
+        C.stage = 1;
+      }
+      C.happy = true;
+      C.tiltT = 0.3f * sinf(C.t * 6.2832f);    // her head sways once a second
+      C.swingT = 3;
+      if (fmodf(C.t, 0.5f) < dt) hopUp(85);    // and she bounces on the half beat
+      C.aux -= dt;
+      if (C.aux <= 0) {                        // notes float up from her
+        C.aux = 0.55f;
+        float side = random(0, 2) ? 1 : -1;        // beside her head: over it, the stats bar would hide them
+        emit(PK_NOTE, hit.hx + side * frand(32, 46), hit.hy + frand(-6, 10), 0, -26, 1.7f, hsv(random(0, 360)), frand(2.6f, 3.6f));
+      }
+      bump(P.fun, 1.2f * dt);
+      if (!pcMusic || C.t > C.dur) setAct(IDLE, 3);
       break;
     default: break;
   }

@@ -132,7 +132,7 @@ static void load() {
 }
 
 // ---------- Particles ----------
-enum PK : uint8_t { PK_HEART, PK_SPARK, PK_Z, PK_CRUMB, PK_CONFETTI, PK_FUR, PK_SHARD, PK_DUST, PK_DROP, PK_RING, PK_PETAL };
+enum PK : uint8_t { PK_HEART, PK_SPARK, PK_Z, PK_CRUMB, PK_CONFETTI, PK_FUR, PK_SHARD, PK_DUST, PK_DROP, PK_RING, PK_PETAL, PK_NOTE };
 struct Part {
   float x, y, vx, vy, life, max, size;
   uint16_t col;
@@ -176,7 +176,7 @@ static void updateParts(float dt) {
       case PK_DROP: g = 300; break;
       case PK_FUR: g = 25; p.vx += sinf(p.life * 6) * 20 * dt; break;
       case PK_PETAL: g = 40; p.vx = sinf(p.life * 4 + p.size) * 26; break;
-      case PK_HEART: case PK_Z: p.vx = sinf(p.life * 3 + p.size) * 12; break;
+      case PK_HEART: case PK_Z: case PK_NOTE: p.vx = sinf(p.life * 3 + p.size) * 12; break;
       case PK_RING: break;
       default: p.vx *= powf(0.2f, dt); p.vy *= powf(0.2f, dt);
     }
@@ -244,6 +244,16 @@ static void drawParts(uint16_t *fb) {
       case PK_PETAL: {
         int e = cg::ell(p.x, p.y, 3.2f, 1.8f, p.life * 3, p.col);
         cg::alpha(e, a);
+        break;
+      }
+      case PK_NOTE: {                          // a music note: head, stem and flag
+        cg::X.set(p.x, p.y, p.size / 3, false);
+        int h = cg::ell(0, 0, 3.2f, 2.4f, -0.4f, p.col);
+        int st = cg::cap(2.6f, -0.6f, 2.6f, -10, 0.7f, p.col);
+        int fl = cg::cap(2.6f, -10, 6.2f, -7.4f, 0.9f, p.col);
+        cg::alpha(h, a);
+        cg::alpha(st, a);
+        cg::alpha(fl, a);
         break;
       }
       default: fillRect(fb, x, y, 2, 2, p.col);
@@ -424,6 +434,7 @@ static void icon(uint16_t *fb, uint8_t ic, int cx, int cy, uint16_t c) {
 // ---------- The world ----------
 static room::Env E;
 static bool pcBusy = false;
+static bool pcMusic = false;                 // a song plays on the PC (from pc_monitor.py)
 static float worldT = 0;
 
 static void updateEnv() {
@@ -446,6 +457,7 @@ static void updateEnv() {
     }
   }
   pcBusy = pcstats::S.lastData && (int32_t)(millis() - pcstats::S.lastData) < 3000 && pcstats::S.v[0] > 55;
+  pcMusic = pcstats::song(millis()) == 1;
 }
 
 static int today() {
@@ -477,7 +489,7 @@ static bool giftOwed = false;                 // all wishes done: she will bring
 enum Act : uint8_t {
   IDLE, WANDER, LOAFING, GROOMING, KNEADING, STARING, ZOOMIES, CUPPUSH, BOXSIT, SUNBATHE, WINDOWWATCH,
   LAPTOP, SLEEPING, EATING, ANNOYED, SWAT, SNEEZE, KBWALK, YAWN, REFUSE, CELEBRATE, PLAY,
-  FLOPPING, DRINK, CLIMB, SCRATCH, RUB, SNIFF, PLANTCHEW, BEDLOAF, GIFTING
+  FLOPPING, DRINK, CLIMB, SCRATCH, RUB, SNIFF, PLANTCHEW, BEDLOAF, GIFTING, DANCING
 };
 struct Cat {
   float x = 130, hop = 0, hopV = 0, base = room::CAT_Y;

@@ -279,6 +279,35 @@ int main() {
   tap(296, 130);
   runAct(900, "c23_plant", [] { return C.act == PLANTCHEW && C.stage == 1 && C.t > 1.0f; });
 
+  // ---- a song plays on the PC: she dances ----
+  setRoom(room::LIVING);
+  {
+    auto music = [](int frames) {              // pc_monitor.py repeats the song line every 5 s
+      for (int k = 0; k < frames; k++) {
+        if (k % 200 == 0) Serial.in += "NP 1 Test Song\tThe Band\n";
+        step(1);
+      }
+    };
+    int picked = 0;
+    for (int k = 0; k < 60 && !picked; k++) {  // left alone with music on, she starts to dance by herself
+      forceAct(IDLE, 0.1f);
+      music(12);
+      picked = C.act == DANCING;
+    }
+    fails += check(picked, "with a song on the PC, she picks dancing by herself");
+    forceAct(DANCING, 12);
+    float fun0 = P.fun = 40;
+    music(110);
+    shot("c23a_dancing");
+    int notes = 0;
+    for (auto &p : parts) notes += p.life > 0 && p.kind == PK_NOTE;
+    fails += check(C.act == DANCING && notes > 0 && P.fun > fun0, "she dances: notes float up and her fun goes up");
+    step(600);                                 // the PC goes quiet for 13 s
+    fails += check(C.act != DANCING, "she stops when the music stops");
+    forceAct(IDLE, 30);
+    step(5);
+  }
+
   // ---- night in the living room: the fountain glows ----
   setRoom(room::LIVING);
   clockapp::tzOffset += 9 * 3600;
