@@ -7,6 +7,7 @@ the test does not change the saved game, scores or settings.
     pip install pyserial
     python tools/hwtest.py            # the full tour: every app, with checks and pictures
     python tools/hwtest.py status     # only ask the deck how it is (works with a normal build too)
+    python tools/hwtest.py dance      # wake Chindi in the afternoon, play her a song, take pictures
 
 Pictures go to tools/hwtest_out/. Close pc_monitor.py and the Serial Monitor first.
 The tour does not press the Macros keys and does not tap in Settings: those would act on the
@@ -237,9 +238,31 @@ def tour(d):
     return d.fails
 
 
+def dance(d):
+    """She dances when a song plays on the PC. She must be awake: make it the afternoon for her."""
+    d.home()
+    d.send("hour 14")
+    d.open(0)
+    time.sleep(1.5)
+    d.tap(160, 110, 120, 1.0)                  # a tap wakes her, if she sleeps on the floor
+    d.tap(60, 100, 120, 3.5)                   # or on the cat tree
+    for k in range(12):                        # she picks what to do next every few seconds
+        for _ in range(5):
+            d.send("NP 1 Test Song (sent by hwtest)\tThe Test Band")
+            time.sleep(1.0)
+        d.status("song on, picture dance%02d" % k)
+        d.shot("dance%02d" % k)
+    d.send("hour -1")
+    d.home()
+    print("Look at the pictures in %s: notes float beside her head when she dances." % OUT)
+    return 0
+
+
 if __name__ == "__main__":
     deck = Deck()
     if len(sys.argv) > 1 and sys.argv[1] == "status":
         deck.status("deck")
         sys.exit(0)
+    if len(sys.argv) > 1 and sys.argv[1] == "dance":
+        sys.exit(dance(deck))
     sys.exit(tour(deck))

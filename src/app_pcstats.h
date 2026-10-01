@@ -21,7 +21,8 @@ namespace pcstats {
 // "touch x y ms" holds the stylus at x, y for ms milliseconds,
 // "drag x0 y0 x1 y1 ms" moves it from x0, y0 to x1, y1 in ms milliseconds,
 // "shot" sends the picture on the screen: the line "SHOT 320 240", then 153600 bytes
-// (each pixel as RGB565, low byte first).
+// (each pixel as RGB565, low byte first),
+// "hour h" makes it h o'clock for Chindi (she sleeps at night; -1 gives the real time back).
 enum { F_CPU_P, F_RAM, F_GPU, F_CPUT, F_GPUT, F_DOWN, F_UP, F_RAMU, F_RAMT, NF };
 static const int HISTN = 150;
 
@@ -46,6 +47,10 @@ static State S;
 
 static const char *const NAMES[3] = {"CPU", "RAM", "GPU"};
 static const uint16_t COLS[3] = {rgb(60, 200, 255), rgb(255, 90, 200), rgb(110, 255, 120)};
+
+#ifdef DECK_TEST
+static float testHour = -1;                   // the time of day that a test asked for, or -1
+#endif
 
 static void parseSong(char *p) {
   S.npState = (uint8_t)constrain(atoi(p), 0, 2);
@@ -81,6 +86,10 @@ static void parse(char *s) {
     injY1 = drag ? v[3] : v[1];
     injFrom = millis();
     injUntil = injFrom + max(drag ? v[4] : v[2], 1);
+    return;
+  }
+  if (strncmp(s, "hour ", 5) == 0) {
+    testHour = atof(s + 5);
     return;
   }
   if (strcmp(s, "shot") == 0) {

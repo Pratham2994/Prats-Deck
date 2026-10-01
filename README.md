@@ -85,7 +85,7 @@ A tap on the open floor calls her over.
 - **Levels:** bond levels 1 to 10 unlock rooms, toys and things to wear. Daily streaks give treats.
 - **Mini-games:** Fish Catch, Mouse Whack, Laser Chase and Zoomies (she runs through the garden; tap to jump over the cucumbers and puddles).
 
-**On her own** she wanders, grooms, kneads, loafs, flops on her side, stares at nothing, gets the zoomies, pushes the cup off the table, sits in boxes, naps in the sunbeam and sleeps at night. The window shows the real weather and time (from the Clock app). When `pc_monitor.py` reports a busy CPU, she lies on the warm laptop. When it reports that a song plays on the PC, she dances to it, with notes in the air, and her fun goes up.
+**On her own** she wanders, grooms, kneads, loafs, flops on her side, stares at nothing, gets the zoomies, pushes the cup off the table, sits in boxes, naps in the sunbeam and sleeps at night. The window shows the real weather and time (from the Clock app). When `pc_monitor.py` reports a busy CPU, she lies on the warm laptop. When it reports that a song plays on the PC, she dances to it, with notes in the air, and her fun goes up. She starts when the song starts, if she is awake.
 
 **Keyboard walk:** when it is on, she sometimes walks on your keyboard and types a few letters on your PC (about every 25 to 60 minutes, never Enter). The letters go into the window that is active on the PC. Turn it off in Settings if that is a problem.
 

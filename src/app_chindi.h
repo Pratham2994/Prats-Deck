@@ -448,6 +448,12 @@ static void updateEnv() {
     E.hour = tm.tm_hour + tm.tm_min / 60.0f;
     E.timeKnown = true;
   }
+#ifdef DECK_TEST
+  if (pcstats::testHour >= 0) {                // a test asked for this time of day
+    E.hour = pcstats::testHour;
+    E.timeKnown = true;
+  }
+#endif
   if (clockapp::haveWeather) {
     switch (clockapp::kindOf(clockapp::code)) {
       case clockapp::K_PARTLY: case clockapp::K_CLOUDY: E.wx = room::W_CLOUDY; break;

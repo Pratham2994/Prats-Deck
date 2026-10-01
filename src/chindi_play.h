@@ -1851,6 +1851,14 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
   if (mode == MD_GALLERY) { galleryFrame(fb); return; }
   if (mode == MD_ALBUM) { albumFrame(fb); return; }
 
+  // a song starts on the PC: she dances at once, if she is awake and has nothing to finish
+  static bool musicWas = false;
+  if (pcMusic && !musicWas && mode == MD_NORMAL && sheet == SH_NONE && !busyAct() && C.act != SLEEPING) {
+    setAct(DANCING, frand(9, 15));
+    C.aux = 0;
+  }
+  musicWas = pcMusic;
+
   bool ui = (T.down || T.released) && onUI(T.startX, T.startY);
 
   // world

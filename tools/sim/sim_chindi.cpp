@@ -306,6 +306,16 @@ int main() {
     fails += check(C.act == DANCING && notes > 0 && P.fun > fun0, "she dances: notes float up and her fun goes up");
     step(600);                                 // the PC goes quiet for 13 s
     fails += check(C.act != DANCING, "she stops when the music stops");
+    forceAct(LOAFING, 30);
+    step(5);
+    music(20);
+    fails += check(C.act == DANCING, "when a song starts, she gets up and dances at once");
+    step(600);
+    forceAct(SLEEPING, 1e9f);
+    step(200);
+    music(20);
+    fails += check(C.act == SLEEPING, "a song does not wake her");
+    step(600);
     forceAct(IDLE, 30);
     step(5);
   }
