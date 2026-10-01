@@ -1,17 +1,17 @@
-// picodeck.ino
 // Prats Deck: 12 touch apps for the Waveshare Pico-ResTouch-LCD-2.8 on a Pico 2 W.
 //
 //   Chindi     virtual pet cat: feed, pet, play, mini-games, photos
 //   Galaxy     particle galaxy you swirl, drag and flick
-//   Macro Pad  media keys and shortcuts for your PC over USB
-//   PC Stats   live CPU / RAM / GPU from your PC (run pc_monitor.py)
+//   Macros     media keys and shortcuts for your PC over USB
+//   Monitor    live CPU / RAM / GPU from your PC (run pc_monitor.py)
 //   Clock      internet clock + weather with a live weather background (needs Wi-Fi in config.h)
 //   Wi-Fi      scanner, channel chart, best channel for your router
 //   Scope      oscilloscope on GP26
+//   Guide      what each app is and how to use it
 //   Paint      glow painting with kaleidoscope mirror
 //   Bricks     Breakout with explosions
 //   Life       Conway's Game of Life with glowing trails
-//   Settings   brightness, touch calibration, Chindi's keyboard walk
+//   Settings   brightness, touch calibration, tear-free screen, Chindi's keyboard walk
 //
 // Go home from any app: hold the top-left corner for half a second.
 //
@@ -30,6 +30,7 @@
 #include "src/app_clock.h"
 #include "src/app_wifiscan.h"
 #include "src/app_scope.h"
+#include "src/app_guide.h"
 #include "src/app_paint.h"
 #include "src/app_bricks.h"
 #include "src/app_life.h"
@@ -44,6 +45,7 @@ static const App APPS[] = {
   {"Clock", rgb(255, 210, 80), clockapp::icon, clockapp::enter, clockapp::frame, clockapp::leave},
   {"Wi-Fi", rgb(80, 255, 120), wifiscan::icon, wifiscan::enter, wifiscan::frame, wifiscan::leave},
   {"Scope", rgb(90, 255, 130), scope::icon, scope::enter, scope::frame, scope::leave},
+  {"Guide", rgb(120, 170, 255), guide::icon, guide::enter, guide::frame, guide::leave},
   {"Paint", rgb(255, 120, 220), paint::icon, paint::enter, paint::frame, paint::leave},
   {"Bricks", rgb(255, 150, 60), bricks::icon, bricks::enter, bricks::frame, bricks::leave},
   {"Life", rgb(140, 255, 120), life::icon, life::enter, life::frame, life::leave},
@@ -65,62 +67,90 @@ static void openApp(int i) {
 
 
 // ---------- Home screen ----------
-static const int TILE_W = 80, TILE_H = 68, TILE_Y = 34;
+static const int TILE_W = 80, TILE_H = 62, TILE_Y = 54, ICON = 46;
 
-static void home(uint16_t *fb, float dt) {
-  if (random(0, 100) < 35)
-    spark(random(0, W), random(0, H), random(-25, 26), random(-25, 26), 2.5f, 30 * 256);
-  sparksUpdate(dt);
-  glowRender(fb, pal[PAL_AURORA], dt, 0.5f, 8);
-
-  // status bar: name, then the time on the right
-  text(fb, MEDIUM, "Prats Deck", 12, 25, WHITE);
-  fillRoundRect(fb, 12, 29, 22, 2, 1, rgb(120, 230, 160));
-  char s[32];
-  int rx = W - 8;
+// Top of the home page: big clock with the date and weather, or the name while there is
+// no internet time. Chindi's mood is on the right.
+static void homeHeader(uint16_t *fb, uint32_t now) {
+  net::Status st = clockapp::service(now);     // keeps the time and weather fresh from here too
+  char s[40];
+  int x = 12;
   if (net::timeValid() && clockapp::tzKnown) {
     time_t t = time(nullptr) + clockapp::tzOffset;
     struct tm tm;
     gmtime_r(&t, &tm);
-    snprintf(s, sizeof(s), "%02d:%02d", tm.tm_hour, tm.tm_min);
-    textRight(fb, SMALL, s, rx, 22, WHITE);
-    rx -= textWidth(SMALL, s) + 8;
+    int h = tm.tm_hour;
+    if (CLOCK_24H) snprintf(s, sizeof(s), "%02d:%02d", h, tm.tm_min);
+    else snprintf(s, sizeof(s), "%d:%02d", h % 12 == 0 ? 12 : h % 12, tm.tm_min);
+    x = text(fb, GIANT, s, 10, 45, INK) + 11;
+    static const char *const DAYS[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+    static const char *const MONTHS[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+    tiny(fb, "PRATS DECK", x, 11, rgb(120, 170, 255));
+    snprintf(s, sizeof(s), "%s %d %s", DAYS[tm.tm_wday], tm.tm_mday, MONTHS[tm.tm_mon]);
+    text(fb, SMALL, s, x, 33, INK);
+    if (clockapp::fetchPending) strlcpy(s, "updating...", sizeof(s));
+    else if (clockapp::haveWeather)
+      snprintf(s, sizeof(s), "%s %.0f%c", clockapp::KIND_NAMES[clockapp::kindOf(clockapp::code)], clockapp::temp, 127);
+    else s[0] = 0;
+    tiny(fb, s, x, 38, MUTED);
+  } else {
+    text(fb, LARGE, "Prats Deck", 12, 36, INK);
+    const char *sub = st == net::NO_CONFIG ? "no Wi-Fi set: the clock is off"
+                    : st == net::FAILED ? "Wi-Fi failed" : st == net::CONNECTED ? "getting the time..." : "connecting to Wi-Fi...";
+    tiny(fb, sub, 13, 41, MUTED);
   }
-  uint16_t bc;
-  const char *badge = chindi::homeBadge(bc);
-  if (badge && rx - tinyWidth(badge) - 22 > 128) pill(fb, rx, 8, badge, bc, (int)(128 + 127 * sinf(millis() / 200.0f)));
 
-  for (int i = 0; i < 12; i++) {
+  // Chindi's mood chip. Tap it to visit her.
+  uint16_t mc;
+  const char *mood = chindi::homeMood(mc);
+  if (mood) {
+    int cw = textWidth(SMALL, mood) + 40, cx = W - 8 - cw;
+    bool pressed = T.down && T.downMs >= homeSince && inBox(T.startX, T.startY, cx, 12, cw, 30);
+    fillRoundRect(fb, cx, 12, cw, 30, 15, pressed ? blend(CARD, mc, 80) : CARD);
+    roundRect(fb, cx, 12, cw, 30, 15, blend(CARD_EDGE, mc, 110));
+    kitty::drawHead(fb, cx + 17, 28, 0.2f, 1, 0);
+    text(fb, SMALL, mood, cx + 32, 32, mc);
+  }
+}
+
+static void home(uint16_t *fb, float /*dt*/, uint32_t now) {
+  backdrop(fb);
+  homeHeader(fb, now);
+  if (T.tap && T.downMs >= homeSince && T.startY < TILE_Y - 8 && T.startX > 200) {
+    openApp(0);
+    return;
+  }
+
+  for (int i = 0; i < NAPPS; i++) {
     int x = (i % 4) * TILE_W, y = TILE_Y + (i / 4) * TILE_H;
-    int cx = x + TILE_W / 2, cy = y + 27;
-    if (i >= NAPPS) break;
-    const char *name = APPS[i].name;
+    int cx = x + TILE_W / 2, cy = y + 2 + ICON / 2;
     uint16_t col = APPS[i].color;
     bool pressed = T.down && T.downMs >= homeSince && inBox(T.startX, T.startY, x, y, TILE_W, TILE_H) &&
                    inBox(T.x, T.y, x, y, TILE_W, TILE_H);
-    // app icon: rounded square tinted with the app colour
-    const int S = 50;
-    fillRoundRect(fb, cx - S / 2, cy - S / 2, S, S, 13, pressed ? dim(col) : blend(CARD, col, 34));
-    roundRect(fb, cx - S / 2, cy - S / 2, S, S, 13, pressed ? col : blend(CARD_EDGE, col, 80));
+    // app icon: rounded square with a soft tint of the app colour
+    fillRoundRectV(fb, cx - ICON / 2, cy - ICON / 2, ICON, ICON, 14, blend(CARD, col, pressed ? 130 : 64),
+                   blend(CARD, col, pressed ? 80 : 20));
+    roundRect(fb, cx - ICON / 2, cy - ICON / 2, ICON, ICON, 14, blend(CARD_EDGE, col, pressed ? 220 : 96));
     APPS[i].icon(fb, cx, cy, col);
-    textCenter(fb, SMALL, name, cx, y + 67, pressed ? col : rgb(225, 228, 240));
+    tinyCenter(fb, APPS[i].name, cx, y + 51, pressed ? col : rgb(214, 218, 232));
 
     if (T.tap && T.downMs >= homeSince && inBox(T.startX, T.startY, x, y, TILE_W, TILE_H)) {
       openApp(i);
       return;
     }
   }
-  chindi::homePeek(fb, millis());              // she peeks in from the bottom now and then
+  chindi::homePeek(fb, now);                   // she peeks in from the bottom now and then
 }
 
 // Home button: hold the top-left corner. Shows a ring that fills up.
 static void homeButton(uint16_t *fb, uint32_t now) {
   const uint32_t HOLD_MS = 550;
-  fillCircle(fb, 13, 11, 8, rgb(20, 20, 30));
-  fillTriangle(fb, 9, 11, 15, 7, 15, 15, rgb(150, 150, 170));
+  fillCircle(fb, 13, 12, 9, rgb(22, 24, 36));
+  strokeLine(fb, 15, 7.5f, 10.5f, 12, 2, rgb(170, 174, 196));
+  strokeLine(fb, 10.5f, 12, 15, 16.5f, 2, rgb(170, 174, 196));
   if (T.down && inHomeCorner(T.startX, T.startY) && T.moved < 25) {
     uint32_t held = now - T.downMs;
-    if (held > 100) arc(fb, 13, 11, 10, 13, 0, fminf((float)(held - 100) / (HOLD_MS - 100), 1) * 6.2831853f, WHITE, WHITE);
+    if (held > 100) arc(fb, 13, 12, 10, 13, 0, fminf((float)(held - 100) / (HOLD_MS - 100), 1) * 6.2831853f, WHITE, WHITE);
     if (held >= HOLD_MS) openApp(-1);
   }
 }
@@ -157,7 +187,7 @@ void loop() {
 
   chindi::tick(now, dt);                       // her needs change while the Pico is on
   pcstats::poll();                             // read PC data in every app, so the PC never waits
-  if (cur < 0) home(fb, dt);
+  if (cur < 0) home(fb, dt, now);
   else {
     APPS[cur].frame(fb, dt, now);
     if (cur >= 0) homeButton(fb, now);

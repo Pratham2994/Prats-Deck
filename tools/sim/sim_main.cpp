@@ -65,7 +65,8 @@ static void shot(const char *name) {
   FILE *f = fopen(path, "wb");
   fprintf(f, "P6\n%d %d\n255\n", W, H);
   for (int i = 0; i < W * H; i++) {
-    uint16_t c = lastSent[i];
+    int x = i % W, y = i / W;
+    uint16_t c = lcdSync ? lastSent[x * H + (H - 1 - y)] : lastSent[i];   // tear-free mode sends a turned picture
     uint8_t rgb3[3] = {(uint8_t)((c >> 11) << 3), (uint8_t)(((c >> 5) & 63) << 2), (uint8_t)((c & 31) << 3)};
     fwrite(rgb3, 1, 3, f);
   }
@@ -76,7 +77,7 @@ static void shot(const char *name) {
 static void down(int x, int y) { simDown = true; simX = x; simY = y; }
 static void up() { simDown = false; }
 static void tap(int x, int y) { up(); step(6); down(x, y); step(4); up(); step(7); }
-static void tileTap(int i) { tap((i % 4) * 80 + 40, 34 + (i / 4) * 68 + 27); }
+static void tileTap(int i) { tap((i % 4) * 80 + 40, 54 + (i / 4) * 62 + 25); }
 static void goHome() { down(10, 10); step(30); up(); step(8); }
 
 int main() {
@@ -180,12 +181,16 @@ int main() {
 
   tileTap(7);
   step(10);
-  shot("15_focus_idle");
-  tap(160, 104);
-  step(150);
-  shot("16_focus_running");
+  shot("15_guide_list");
+  tap(240, 150);                               // Scope
+  step(10);
+  shot("16_guide_page");
   goHome();
-  shot("17_home_focus_running");
+
+  tileTap(11);
+  step(10);
+  shot("17_settings");
+  goHome();
 
   tileTap(8);
   step(5);

@@ -30,38 +30,43 @@ static const int EE_SYNC = 73;                // 0 = tear-free mode switched off
 // Chindi uses 256..767 (see app_chindi.h). EEPROM.begin(1024) in setup().
 
 // ---------- Shared look: dark rounded cards, muted labels, one accent colour per app ----------
-static const uint16_t CARD = rgb(13, 15, 24), CARD_EDGE = rgb(34, 38, 56), MUTED = rgb(120, 126, 150);
+static const uint16_t BG_TOP = rgb(17, 19, 36), BG_BOTTOM = rgb(5, 6, 10);
+static const uint16_t CARD = rgb(19, 21, 32), CARD_EDGE = rgb(42, 46, 66);
+static const uint16_t MUTED = rgb(136, 142, 168), INK = rgb(238, 240, 248);
 
-static void card(uint16_t *fb, int x, int y, int w, int h, uint16_t edge = CARD_EDGE, int r = 8) {
+// plain dark background for screens with no live picture behind them
+static void backdrop(uint16_t *fb) { gradRect(fb, 0, 0, W, H, BG_TOP, BG_BOTTOM); }
+
+static void card(uint16_t *fb, int x, int y, int w, int h, uint16_t edge = CARD_EDGE, int r = 10) {
   fillRoundRect(fb, x, y, w, h, r, CARD);
   roundRect(fb, x, y, w, h, r, edge);
 }
 
 // Small rounded badge with a coloured dot, e.g. "LIVE". Right edge at rx. Returns its left edge.
 static int pill(uint16_t *fb, int rx, int y, const char *label, uint16_t col, int dotLevel = 256) {
-  int pw = tinyWidth(label) + 22, px = rx - pw;
+  int pw = tinyWidth(label) + 23, px = rx - pw;
   fillRoundRect(fb, px, y, pw, 16, 8, dim4(col));
   fillCircle(fb, px + 9, y + 8, 3, blend(dim(col), col, dotLevel));
   tiny(fb, label, px + 16, y + 4, col);
   return px;
 }
 
-// Top bar with the app name and a short accent line. The left 26 px hold the home button.
+// Top bar with the app name and an accent mark. The left 26 px hold the home button.
 static void appHeader(uint16_t *fb, const char *title, uint16_t col) {
-  shadeRect(fb, 0, 0, W, 23, true);
-  hline(fb, 0, 23, W, rgb(26, 29, 42));
-  int x = text(fb, SMALL, title, 30, 16, WHITE);
-  fillRoundRect(fb, 30, 19, min(x - 30, 24), 2, 1, col);
+  shadeRect(fb, 0, 0, W, 24, true);
+  hline(fb, 0, 24, W, rgb(28, 31, 46));
+  fillRoundRect(fb, 30, 6, 3, 13, 1, col);
+  text(fb, SMALL, title, 38, 17, INK);
 }
 
 // Button with a label. Lit = pressed or selected.
 static void button(uint16_t *fb, int x, int y, int w, int h, const char *label, uint16_t col, bool lit = false) {
-  fillRoundRect(fb, x, y, w, h, 8, lit ? dim(col) : CARD);
-  roundRect(fb, x, y, w, h, 8, lit ? col : CARD_EDGE);
+  fillRoundRect(fb, x, y, w, h, 9, lit ? blend(CARD, col, 110) : CARD);
+  roundRect(fb, x, y, w, h, 9, lit ? col : CARD_EDGE);
   uint16_t fg = lit ? WHITE : col;
   int tw = textWidth(SMALL, label);
   if (tw <= w - 8) text(fb, SMALL, label, x + (w - tw) / 2, y + h / 2 + 5, fg);
-  else tinyCenter(fb, label, x + w / 2, y + h / 2 - 3, fg);   // long label: small font
+  else tinyCenter(fb, label, x + w / 2, y + h / 2 - 4, fg);   // long label: small font
 }
 
 // Row of n equal buttons along the bottom, y 208..238. Returns the index tapped, or -1.

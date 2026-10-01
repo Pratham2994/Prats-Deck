@@ -568,15 +568,18 @@ static void tick(uint32_t now, float dt) {
 }
 
 // ---------- Home screen helpers ----------
-// short status for the home screen, or nullptr
-static const char *homeBadge(uint16_t &col) {
+// one word on how she is, for the home screen (nullptr before start-up)
+static const char *homeMood(uint16_t &col) {
   if (!began) return nullptr;
-  if ((int32_t)(kbToastUntil - millis()) > 0) { col = rgb(255, 170, 60); return "CHINDI TYPED!"; }
-  if (P.hunger < 25) { col = rgb(255, 160, 70); return "FEED CHINDI"; }
-  if (P.energy < 15) { col = rgb(250, 210, 70); return "CHINDI SLEEPY"; }
-  if (P.fun < 25) { col = rgb(255, 110, 170); return "PLAY?"; }
-  if (P.love < 25) { col = rgb(255, 90, 110); return "PET CHINDI"; }
-  return nullptr;
+  if ((int32_t)(kbToastUntil - millis()) > 0) { col = rgb(255, 170, 60); return "Typed!"; }
+  if (P.hunger < 25) { col = rgb(255, 160, 70); return "Hungry"; }
+  if (P.energy < 15) { col = rgb(250, 210, 70); return "Sleepy"; }
+  if (P.fun < 25) { col = rgb(255, 110, 170); return "Bored"; }
+  if (P.clean < 25) { col = rgb(90, 200, 240); return "Messy"; }
+  if (P.love < 25) { col = rgb(255, 90, 110); return "Lonely"; }
+  if (C.act == SLEEPING) { col = rgb(170, 180, 255); return "Asleep"; }
+  col = rgb(120, 230, 160);
+  return P.hunger + P.energy + P.fun + P.clean + P.love > 350 ? "Happy" : "Okay";
 }
 
 // Now and then she peeks up from the bottom edge of the home screen.

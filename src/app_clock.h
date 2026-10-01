@@ -1,5 +1,5 @@
 // app_clock.h
-// Clock & Weather over Wi-Fi: big glowing clock, current weather, 3-day forecast,
+// Clock & Weather over Wi-Fi: big clock, current weather, 3-day forecast,
 // and a live background that matches the weather (sun, stars, clouds, rain, snow, storm).
 // Time from the internet (NTP). Weather from open-meteo.com (free, no key).
 // Location from your internet address (ip-api.com) unless set in config.h.
@@ -210,9 +210,11 @@ static void enter() {
   }
 }
 
-static void frame(uint16_t *fb, float dt, uint32_t now) {
+// Keep the Wi-Fi link, the time and the weather fresh. Call every frame from a screen that
+// shows them. A download stops everything for a moment, so it runs one frame after
+// fetchPending is set: the screen can show "updating" first.
+static net::Status service(uint32_t now) {
   net::Status st = net::poll();
-
   if (fetchPending) {                          // the "Updating" frame is on screen now
     fetchPending = false;
     bool ok = (haveLoc || fetchLocation()) && fetchWeather();
@@ -221,12 +223,17 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
   } else if (st == net::CONNECTED && (int32_t)(now - nextFetch) >= 0) {
     fetchPending = true;
   }
+  return st;
+}
+
+static void frame(uint16_t *fb, float dt, uint32_t now) {
+  net::Status st = service(now);
 
   int p = background(dt, now);
   glowRender(fb, pal[p], dt);
 
   // ---- time ----
-  char hm[8] = "--:--";
+  char hm[8] = "00:00";
   char date[48] = "";
   int sec = 0;
   bool pm = false;
@@ -244,11 +251,11 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
                                          "August", "September", "October", "November", "December"};
     snprintf(date, sizeof(date), "%s, %d %s", DAYS[tm.tm_wday], tm.tm_mday, MONTHS[tm.tm_mon]);
   }
-  const int dw = 46, dh = 84, dtk = 10;
-  int tw = seg7Width(hm, dw, dtk);
+  int tw = textWidth(CLOCKFACE, hm);
   int tx = (W - tw) / 2;
-  uint16_t tc = rgb(200, 240, 255);
-  seg7Text(fb, hm, tx, 22, dw, dh, dtk, tc);
+  uint16_t tc = net::timeValid() ? rgb(232, 244, 255) : rgb(70, 80, 100);
+  shadeRect(fb, 0, 14, W, 128);                // the live background is busy: calm it behind the time
+  text(fb, CLOCKFACE, hm, tx, 104, tc);
   if (!CLOCK_24H && net::timeValid()) tiny(fb, pm ? "PM" : "AM", tx + tw + 2, 24, tc);
   fillRect(fb, tx, 112, tw, 2, rgb(25, 30, 40));
   fillRect(fb, tx, 112, tw * sec / 59, 2, rgb(80, 180, 255));

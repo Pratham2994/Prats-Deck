@@ -76,7 +76,7 @@ static void shot(const char *name) {
 static void down(int x, int y) { simDown = true; simX = x; simY = y; }
 static void up() { simDown = false; }
 static void tap(int x, int y) { up(); step(6); down(x, y); step(4); up(); step(7); }
-static void tileTap(int i) { tap((i % 4) * 80 + 40, 34 + (i / 4) * 68 + 27); }
+static void tileTap(int i) { tap((i % 4) * 80 + 40, 54 + (i / 4) * 62 + 25); }
 static void goHome() { down(10, 10); step(30); up(); step(8); }
 static int check(bool ok, const char *what) {
   printf("  [%s] %s\n", ok ? "PASS" : "FAIL", what);
@@ -290,29 +290,6 @@ int main() {
   shot("c24_warm_laptop");
   fails += check(chindi::C.act == chindi::LAPTOP && chindi::C.stage == 2, "she lies on the warm laptop when the PC is busy");
   pcstats::S.lastData = 0;
-  step(60);
-
-  // Focus link: co-working and treat
-  focus::setTimer(25, false);
-  focus::running = true;
-  forceAct(chindi::IDLE, 1);
-  step(150);
-  shot("c25_focus_together");
-  fails += check(chindi::C.act == chindi::WORKING, "she works beside you during Focus");
-  uint16_t tr0 = chindi::P.treats;
-  focus::left = 0.01f;
-  step(3);
-  step(100);
-  shot("c26_focus_treat");
-  fails += check(chindi::P.treats == tr0 + 1, "a finished Focus session earns a treat");
-  // skipping the break: yawn
-  focus::setTimer(25, false);
-  focus::running = true;
-  step(5);
-  fails += check(chindi::C.act == chindi::YAWN || chindi::yawnPending == false, "skipping the break makes her yawn");
-  shot("c27_yawn");
-  focus::running = false;
-  focus::done = false;
   step(60);
 
   // keyboard walk

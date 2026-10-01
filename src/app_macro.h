@@ -35,7 +35,7 @@ static const Key KEYS[12] = {
   {"Copy", "Ctrl+C", IC_TEXT, 0, {KEY_LEFT_CTRL, 'c', 0}, false},
   {"Paste", "Ctrl+V", IC_TEXT, 0, {KEY_LEFT_CTRL, 'v', 0}, false},
   {"Undo", "Ctrl+Z", IC_TEXT, 0, {KEY_LEFT_CTRL, 'z', 0}, false},
-  {"Tasks", "Task Manager", IC_TEXT, 0, {KEY_LEFT_CTRL, KEY_LEFT_SHIFT, KEY_ESC}, false},
+  {"Tasks", "Task Mgr", IC_TEXT, 0, {KEY_LEFT_CTRL, KEY_LEFT_SHIFT, KEY_ESC}, false},
 };
 
 static const int COLS = 4, ROWS = 3;
