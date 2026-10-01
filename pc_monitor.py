@@ -1,4 +1,4 @@
-"""pc_monitor.py - send live PC stats to the Pico Deck "PC Stats" app over USB.
+"""pc_monitor.py - send live PC stats to the Prats Deck "Monitor" app over USB.
 
 Setup (once):
     pip install psutil pyserial
@@ -100,7 +100,7 @@ def main():
             # The port is fine but the Pico is not reading (busy, or old firmware that
             # only reads in the Monitor app). Drop this update and keep the port open.
             if not stalled:
-                print("Pico is not reading the data. Is the Pico Deck firmware running? Waiting...")
+                print("Pico is not reading the data. Is the Prats Deck firmware running? Waiting...")
                 stalled = True
             if link:
                 link.reset_output_buffer()

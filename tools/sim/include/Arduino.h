@@ -40,6 +40,7 @@ extern uint64_t simUs;
 static inline unsigned long millis() { return (unsigned long)(simUs / 1000); }
 static inline unsigned long micros() { return (unsigned long)simUs; }
 static inline void delay(unsigned long ms) { simUs += ms * 1000; }
+static inline void delayMicroseconds(unsigned long us) { simUs += us; }
 static inline long random(long a, long b) { return b <= a ? a : a + rand() % (b - a); }
 static inline long random(long b) { return random(0, b); }
 static inline void randomSeed(unsigned long s) { srand((unsigned)s); }
@@ -172,7 +173,7 @@ static inline bool spi_is_readable(spi_inst_t *) { return false; }
 static inline uint spi_get_dreq(spi_inst_t *, bool) { return 0; }
 
 enum { GPIO_OUT = 1, GPIO_IN = 0 };
-enum { GPIO_FUNC_SPI = 1, GPIO_FUNC_PWM = 4 };
+enum { GPIO_FUNC_SPI = 1, GPIO_FUNC_PWM = 4, GPIO_FUNC_SIO = 5 };
 enum { GPIO_SLEW_RATE_FAST = 1 };
 enum { GPIO_DRIVE_STRENGTH_8MA = 2 };
 void gpio_put(uint p, bool v);

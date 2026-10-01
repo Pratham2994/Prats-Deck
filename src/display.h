@@ -1,5 +1,5 @@
 // display.h
-// ST7789 320x240 over SPI1 with DMA, two frame buffers, and drawing helpers.
+// ST7789 320x240 over SPI1 with DMA, two frame buffers, tear-free sending, and drawing helpers.
 // Waveshare Pico-ResTouch-LCD-2.8 on a Pico 2 W.
 #pragma once
 
@@ -29,7 +29,11 @@ static const bool INVERT = true;             // black shows as white: set false
 static const uint32_t LCD_HZ = 62500000;     // the SDK rounds down to what the clock allows
 static const uint32_t TP_HZ = 2000000;
 
-static uint16_t frame[2][W * H];             // RGB565. One is sent while the other is drawn
+// Two buffers, RGB565.
+//   Normal mode   : one is sent while the other is drawn, then they swap.
+//   Tear-free mode: frame[0] is always drawn. frame[1] holds the same picture turned to the
+//                   screen's own scan order, and is the one sent.
+static uint16_t frame[2][W * H];
 static int dmaCh;
 static bool sending = false;
 
@@ -70,11 +74,12 @@ static void lcdWait() {
   sending = false;
 }
 
-// Start sending a whole frame by DMA. Returns at once.
-static void lcdStart(const uint16_t *buf) {
+// Start sending a whole buffer by DMA. Returns at once. cols x rows is the order the
+// pixels are stored in: 320 x 240 for a landscape buffer, 240 x 320 for the screen's own order.
+static void lcdStart(const uint16_t *buf, int cols = W, int rows = H) {
   lcdWait();
-  static const uint8_t caset[] = {0, 0, (W - 1) >> 8, (W - 1) & 0xFF};
-  static const uint8_t raset[] = {0, 0, (H - 1) >> 8, (H - 1) & 0xFF};
+  const uint8_t caset[] = {0, 0, (uint8_t)((cols - 1) >> 8), (uint8_t)((cols - 1) & 0xFF)};
+  const uint8_t raset[] = {0, 0, (uint8_t)((rows - 1) >> 8), (uint8_t)((rows - 1) & 0xFF)};
   lcdCmd(0x2A, caset, 4);
   lcdCmd(0x2B, raset, 4);
   uint8_t c = 0x2C;
@@ -88,8 +93,188 @@ static void lcdStart(const uint16_t *buf) {
   sending = true;
 }
 
-static void lcdShow(const uint16_t *buf) {
-  lcdStart(buf);
+
+// ---------- Tear-free mode ----------
+// The screen redraws itself line by line along its long side, about 60 times a second. A
+// landscape picture is sent along the short side, so the two cross and a slanted line shows
+// on anything that moves. The cure has three parts:
+//   1. Turn the picture and send it in the screen's own line order.
+//   2. Slow the screen's redraw a little, so a send is quicker than a redraw.
+//   3. Ask the screen which line it is on, and start a send only when the send cannot
+//      catch up with the redraw.
+// Part 3 needs the screen to answer on the SPI bus. That is tested at start-up. If there is
+// no answer, the old way of sending is used.
+static const bool TEAR_FREE = true;          // false: never use this mode
+static bool syncFound = false;               // the screen answers
+static bool lcdSync = false;                 // tear-free mode is on
+static int syncLines = 0;                    // scan lines in one redraw (about 344)
+static int syncSafe = 0;                     // do not start a send before this line
+static float syncHz = 0;                     // measured redraw rate
+static uint8_t syncOnMosi = 0, syncSkip = 0; // which wire the answer comes on, and bits to skip
+
+static inline void bbDelay() {
+  for (volatile int i = 0; i < 3; i++) {}
+}
+
+// Send command c, then read `bits` bits of answer, by toggling the pins by hand. The ST7789
+// answers too slowly for the fast clock, and some boards wire its answer to the MOSI pin.
+// The first bit read ends up as the top bit of each result.
+static void lcdReadRaw(uint8_t c, int bits, uint32_t &miso, uint32_t &mosi) {
+  gpio_put(PIN_SCK, 0);
+  gpio_set_dir(PIN_SCK, GPIO_OUT);
+  gpio_set_dir(PIN_MOSI, GPIO_OUT);
+  gpio_set_dir(PIN_MISO, GPIO_IN);
+  gpio_set_function(PIN_SCK, GPIO_FUNC_SIO);
+  gpio_set_function(PIN_MOSI, GPIO_FUNC_SIO);
+  gpio_set_function(PIN_MISO, GPIO_FUNC_SIO);
+  gpio_put(PIN_CS, 0);
+  gpio_put(PIN_DC, 0);
+  for (int b = 7; b >= 0; b--) {
+    gpio_put(PIN_MOSI, (c >> b) & 1);
+    bbDelay();
+    gpio_put(PIN_SCK, 1);
+    bbDelay();
+    gpio_put(PIN_SCK, 0);
+  }
+  gpio_put(PIN_DC, 1);
+  gpio_set_dir(PIN_MOSI, GPIO_IN);
+  miso = mosi = 0;
+  for (int b = 0; b < bits; b++) {
+    bbDelay();
+    gpio_put(PIN_SCK, 1);
+    miso = (miso << 1) | (gpio_get(PIN_MISO) ? 1 : 0);
+    mosi = (mosi << 1) | (gpio_get(PIN_MOSI) ? 1 : 0);
+    bbDelay();
+    gpio_put(PIN_SCK, 0);
+  }
+  gpio_put(PIN_CS, 1);
+  gpio_set_dir(PIN_MOSI, GPIO_OUT);
+  gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
+  gpio_set_function(PIN_MOSI, GPIO_FUNC_SPI);
+  gpio_set_function(PIN_MISO, GPIO_FUNC_SPI);
+}
+
+static const int SYNC_BITS = 26;
+
+// the scan line as a number, from the raw bits of command 0x45 (-1 if it cannot be one)
+static inline int syncValue(uint32_t raw, int skip) {
+  uint32_t v = (raw >> (SYNC_BITS - 16 - skip)) & 0xFFFF;
+  return v < 512 ? (int)v : -1;
+}
+
+#ifdef SIM_FORCE_SYNC
+static int lcdScanLine() { return 200; }
+#else
+static int lcdScanLine() {
+  uint32_t a, b;
+  lcdReadRaw(0x45, SYNC_BITS, a, b);
+  return syncValue(syncOnMosi ? b : a, syncSkip);
+}
+#endif
+
+// Find out if the screen reports its scan line. A true answer climbs steadily with time and
+// drops back to zero once per redraw. Noise does not. Sets syncFound, syncLines, syncHz.
+static void lcdSyncProbe() {
+#ifdef SIM_FORCE_SYNC
+  syncFound = true;
+  syncLines = 344;
+  syncHz = 44.7f;
+#else
+  const int N = 96;
+  static uint32_t us[N], rm[N], ro[N];
+  for (int i = 0; i < N; i++) {
+    lcdReadRaw(0x45, SYNC_BITS, rm[i], ro[i]);
+    us[i] = micros();
+    delayMicroseconds(300);
+  }
+  for (int pin = 0; pin < 2 && !syncFound; pin++)
+    for (int skip = 0; skip <= 9 && !syncFound; skip++) {
+      const uint32_t *raw = pin ? ro : rm;
+      int good = 0, wraps = 0, top = 0, prev = syncValue(raw[0], skip);
+      long lines = 0, span = 0;
+      bool bad = prev < 0;
+      for (int i = 1; i < N && !bad; i++) {
+        int v = syncValue(raw[i], skip);
+        if (v < 0) {
+          bad = true;
+          break;
+        }
+        int dv = v - prev;
+        long dt = (long)(us[i] - us[i - 1]);
+        if (dv < 0) wraps++;
+        else if (dv * 1000L >= dt * 8 && dv * 1000L <= dt * 30) {   // 8..30 lines per ms
+          good++;
+          lines += dv;
+          span += dt;
+        }
+        if (v > top) top = v;
+        prev = v;
+      }
+      if (bad || wraps < 1 || wraps > 3 || good < N - 6 || top < 300 || top > 420 || span <= 0) continue;
+      syncFound = true;
+      syncOnMosi = pin;
+      syncSkip = skip;
+      syncLines = top + 1;
+      syncHz = (float)lines / span * 1e6f / syncLines;
+    }
+#endif
+  if (!syncFound) return;
+  // a send must be quicker than a redraw, or the redraw would overtake it
+  float sendS = (float)W * H * 16 / spi_get_baudrate(spi1);
+  float ratio = sendS * syncHz;
+  if (ratio > 0.96f) {
+    syncFound = false;
+    return;
+  }
+  syncSafe = 20 + (int)(W * (1 - ratio)) + 30;
+}
+
+// Hold until the redraw is at a line where a new send cannot cross it.
+static void lcdSyncWait() {
+  for (int tries = 0; tries < 60; tries++) {
+    int line = lcdScanLine();
+    if (line < 0 || line > syncLines + 20) return;            // no sense: do not wait
+    if (line >= syncSafe && line < syncLines - 6) return;
+    delayMicroseconds(150);
+  }
+}
+
+// Landscape picture -> the screen's own order. Screen row r, column c = landscape (r, 239 - c).
+static void lcdTurn(const uint16_t *src, uint16_t *dst) {
+  for (int r = 0; r < W; r++) {
+    const uint16_t *s = src + (H - 1) * W + r;
+    for (int c = 0; c < H; c++, s -= W) *dst++ = *s;
+  }
+}
+
+// Turn tear-free mode on or off. It stays off if the screen does not answer.
+static void lcdSetSync(bool on) {
+  on = on && syncFound && TEAR_FREE && MADCTL == 0x60;
+  lcdWait();
+  const uint8_t madctl = on ? 0x00 : MADCTL;
+  const uint8_t rate = on ? 0x19 : 0x0F;       // 0x19 = about 45 redraws a second, 0x0F = 60
+  lcdCmd(0x36, &madctl, 1);
+  lcdCmd(0xC6, &rate, 1);
+  lcdSync = on;
+}
+
+// Show the picture in fb. Returns the buffer to draw the next picture in.
+static uint16_t *lcdPresent(uint16_t *fb) {
+  if (!lcdSync) {
+    lcdStart(fb);
+    return fb == frame[0] ? frame[1] : frame[0];
+  }
+  lcdWait();
+  if (fb != frame[0]) memcpy(frame[0], fb, sizeof(frame[0]));
+  lcdTurn(frame[0], frame[1]);
+  lcdSyncWait();
+  lcdStart(frame[1], H, W);
+  return frame[0];
+}
+
+// Show the picture in fb and wait until it is on the screen.
+static void lcdShow(uint16_t *fb) {
+  lcdPresent(fb);
   lcdWait();
 }
 
@@ -142,18 +327,21 @@ static void lcdBegin() {
   delay(150);
   lcdCmd(0x11);
   delay(120);
-  const uint8_t colmod = 0x55, madctl = MADCTL;
+  const uint8_t colmod = 0x55, madctl = MADCTL, rate = 0x19;
   lcdCmd(0x3A, &colmod, 1);
   lcdCmd(0x36, &madctl, 1);
   lcdCmd(INVERT ? 0x21 : 0x20);
   lcdCmd(0x13);
+  lcdCmd(0xC6, &rate, 1);                      // slower redraw, needed for the test below
   lcdCmd(0x29);
   lcdShow(frame[0]);                           // buffers start black
-  delay(20);
+  delay(40);
+  if (TEAR_FREE) lcdSyncProbe();
+  lcdSetSync(true);
 }
 
 
-// ---------- Colour helpers ----------
+/ ---------- Colour helpers ----------
 static inline uint16_t dim(uint16_t c) { return (c >> 1) & 0x7BEF; }        // half brightness
 static inline uint16_t dim4(uint16_t c) { return (c >> 2) & 0x39E7; }       // quarter brightness
 

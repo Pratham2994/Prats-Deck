@@ -15,6 +15,7 @@ static void begin() {
   lightIdx = EEPROM.read(EE_LIGHT);
   if (lightIdx > 3) lightIdx = 0;
   setBacklight(LIGHTS[lightIdx]);
+  if (EEPROM.read(EE_SYNC) == 0) lcdSetSync(false);
 }
 
 static void enter() {}
@@ -71,7 +72,7 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
   card(fb, 8, 176, W - 16, 58);
   tiny(fb, "ABOUT", 18, 184, MUTED);
   uint32_t up = now / 1000;
-  snprintf(s, sizeof(s), "Pico Deck   %d FPS   %d KB free", fps, rp2040.getFreeHeap() / 1024);
+  snprintf(s, sizeof(s), "Prats Deck   %d FPS   %d KB free", fps, rp2040.getFreeHeap() / 1024);
   text(fb, SMALL, s, 18, 208, WHITE);
   snprintf(s, sizeof(s), "Up %lu:%02lu:%02lu   CPU %lu MHz", (unsigned long)(up / 3600), (unsigned long)(up / 60 % 60),
            (unsigned long)(up % 60), (unsigned long)(clock_get_hz(clk_sys) / 1000000));

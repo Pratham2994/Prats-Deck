@@ -1,5 +1,5 @@
 // picodeck.ino
-// Pico Deck: 12 touch apps for the Waveshare Pico-ResTouch-LCD-2.8 on a Pico 2 W.
+// Prats Deck: 12 touch apps for the Waveshare Pico-ResTouch-LCD-2.8 on a Pico 2 W.
 //
 //   Chindi     virtual pet cat: feed, pet, play, mini-games, photos
 //   Galaxy     particle galaxy you swirl, drag and flick
@@ -74,7 +74,7 @@ static void home(uint16_t *fb, float dt) {
   glowRender(fb, pal[PAL_AURORA], dt, 0.5f, 8);
 
   // status bar: name, then the time on the right
-  text(fb, MEDIUM, "Pico Deck", 12, 25, WHITE);
+  text(fb, MEDIUM, "Prats Deck", 12, 25, WHITE);
   fillRoundRect(fb, 12, 29, 22, 2, 1, rgb(120, 230, 160));
   char s[32];
   int rx = W - 8;
@@ -142,7 +142,7 @@ void setup() {
 }
 
 void loop() {
-  static int draw = 0;                         // buffer the CPU draws into
+  static uint16_t *fb = frame[0];              // buffer the CPU draws into
   static uint32_t lastUs = micros(), fpsT = millis();
   static int frames = 0;
 
@@ -153,9 +153,7 @@ void loop() {
 
   lcdWait();                                   // previous frame finished sending
   touchUpdate(now, dt);
-  lcdStart(frame[draw]);                       // send the frame drawn last time...
-  draw ^= 1;                                   // ...and draw the next one meanwhile
-  uint16_t *fb = frame[draw];
+  fb = lcdPresent(fb);                         // send the frame drawn last time, draw the next one meanwhile
 
   chindi::tick(now, dt);                       // her needs change while the Pico is on
   pcstats::poll();                             // read PC data in every app, so the PC never waits

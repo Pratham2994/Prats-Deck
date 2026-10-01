@@ -136,7 +136,7 @@ static void waiting(uint16_t *fb, uint32_t now) {
     tinyCenter(fb, n, 30, y + 7, BLACK);
     text(fb, SMALL, steps[i], 46, y + 15, i ? COLS[0] : WHITE);
   }
-  tinyCenter(fb, "In the picodeck folder. Close Serial Monitor.", W / 2, 128, MUTED);
+  tinyCenter(fb, "In the Prats-Deck folder. Close Serial Monitor.", W / 2, 128, MUTED);
 
   // this Pico, as three small cards
   char v[3][24];
