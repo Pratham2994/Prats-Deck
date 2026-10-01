@@ -1,0 +1,8 @@
+# Your Wi-Fi password lives here. Copy config.example.h to config.h and edit it.
+config.h
+
+# build and simulator output
+build/
+tools/sim/out/
+*.exe
+*.uf2

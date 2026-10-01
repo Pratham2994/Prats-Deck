@@ -1,0 +1,629 @@
+// app_chindi.h
+// Chindi, a virtual pet based on a real orange and white cat.
+//
+//   Needs     : hunger, energy, fun, clean, love. They change only while the Pico is on.
+//   Touch     : stroke her head, chin or back; boop the nose; tap her eyes to slow-blink;
+//               belly rubs are a gamble; do not pull her tail.
+//   Play      : laser pointer, feather wand, yarn ball, and three mini-games.
+//   Life      : she wanders, grooms, kneads, loafs, stares at nothing, gets the zoomies,
+//               pushes the cup off the table, sits in boxes, naps in the sunbeam, watches
+//               the rain, lies on the warm laptop when your PC is busy, sleeps at night.
+//   Links     : real weather and time in the window, Focus sessions earn treats, the
+//               Monitor app warms the laptop, she peeks in on the home screen, and (if on)
+//               she sometimes walks on your keyboard and types on your PC.
+//   Progress  : bond levels unlock accessories, toys and rooms. Daily streaks, photos.
+#pragma once
+
+#include <Keyboard.h>
+#include "core.h"
+#include "net.h"
+#include "app_clock.h"
+#include "app_pcstats.h"
+#include "app_focus.h"
+#include "chindi_cat.h"
+#include "chindi_room.h"
+
+namespace chindi {
+
+using kitty::Look;
+
+// ---------- Saved state ----------
+static const int EE_PET = 256;
+static const uint32_t MAGIC = 0x43484E31;    // "CHN1"
+static const int NPHOTO = 12;
+
+struct Photo {
+  uint8_t room, pose, mouth, acc, flags, wx, eye, pad;   // flags: 1 flip, 2 happy, 4 in box, 8 glasses
+  int16_t x, hourQ;                                       // hour * 10
+  int32_t day;                                            // days since 1970, or -1
+};
+
+struct Save {
+  uint32_t magic;
+  float hunger, energy, fun, clean, love;                 // 0..100
+  uint32_t xp;
+  uint16_t treats, streak;
+  int32_t lastDay;
+  uint8_t acc, room, kbWalk, nPhotos, tutorial, pad[3];
+  uint16_t hiFish, hiMouse, hiLaser, pad2;
+  uint32_t pets, meals, games;
+  Photo photos[NPHOTO];
+};
+static_assert(EE_PET + sizeof(Save) <= 1024, "Chindi's save data must fit in the 1 KB flash area");
+static Save P;
+static bool began = false, dirty = false, open = false;
+static uint32_t lastSave = 0;
+
+static void defaults() {
+  memset(&P, 0, sizeof(P));
+  P.magic = MAGIC;
+  P.hunger = 70;
+  P.energy = 80;
+  P.fun = 60;
+  P.clean = 85;
+  P.love = 50;
+  P.treats = 3;
+  P.kbWalk = 1;
+  P.lastDay = -1;
+}
+
+static void saveNow() {
+  EEPROM.put(EE_PET, P);
+  EEPROM.commit();
+  dirty = false;
+  lastSave = millis();
+}
+
+static void load() {
+  EEPROM.get(EE_PET, P);
+  if (P.magic != MAGIC) {
+    defaults();
+    saveNow();
+  }
+  float *v[5] = {&P.hunger, &P.energy, &P.fun, &P.clean, &P.love};
+  for (float *f : v)
+    if (!(*f >= 0 && *f <= 100)) *f = 50;
+  if (P.acc >= kitty::NACC) P.acc = 0;
+  if (P.room >= room::NROOM) P.room = 0;
+  if (P.nPhotos > NPHOTO) P.nPhotos = 0;
+}
+
+static void bump(float &v, float d) {
+  v = constrain(v + d, 0.0f, 100.0f);
+  dirty = true;
+}
+
+// ---------- Levels and unlocks ----------
+static const uint32_t LV[10] = {0, 60, 150, 280, 450, 660, 920, 1230, 1600, 2050};
+static const uint8_t ACC_LV[kitty::NACC] = {1, 2, 5, 7, 9, 10};
+static const char *const ACC_NAMES[kitty::NACC] = {"None", "Bandana", "Bow", "Bell collar", "Party hat", "Crown"};
+static const uint8_t TOY_LV[3] = {1, 3, 4};
+static const char *const TOY_NAMES[3] = {"Laser", "Feather", "Yarn"};
+static const uint8_t ROOM_LV[room::NROOM] = {1, 6, 8};
+
+static int level() {
+  int l = 1;
+  while (l < 10 && P.xp >= LV[l]) l++;
+  return l;
+}
+
+static const char *unlockText(int lv) {
+  switch (lv) {
+    case 2: return "Bandana unlocked";
+    case 3: return "Feather wand unlocked";
+    case 4: return "Yarn ball unlocked";
+    case 5: return "Bow unlocked";
+    case 6: return "Study room unlocked";
+    case 7: return "Bell collar unlocked";
+    case 8: return "Balcony unlocked";
+    case 9: return "Party hat unlocked";
+    case 10: return "Crown unlocked!";
+    default: return "";
+  }
+}
+
+// ---------- Particles ----------
+enum PK : uint8_t { PK_HEART, PK_SPARK, PK_Z, PK_CRUMB, PK_CONFETTI, PK_FUR, PK_SHARD, PK_DUST, PK_DROP };
+struct Part {
+  float x, y, vx, vy, life, max, size;
+  uint16_t col;
+  uint8_t kind;
+};
+static const int NPART = 96;
+static Part parts[NPART];
+static int partNext = 0;
+
+static void emit(uint8_t k, float x, float y, float vx, float vy, float life, uint16_t col, float size = 3) {
+  Part &p = parts[partNext];
+  partNext = (partNext + 1) % NPART;
+  p = {x, y, vx, vy, life, life, size, col, k};
+}
+
+static float frand(float a, float b) { return a + (b - a) * random(0, 10001) / 10000.0f; }
+
+static void burst(uint8_t k, float x, float y, int n, float spd, float life, uint16_t col, float size = 3) {
+  for (int i = 0; i < n; i++) {
+    float a = frand(0, 6.283f), s = spd * frand(0.4f, 1);
+    emit(k, x, y, cosf(a) * s, sinf(a) * s - (k == PK_CONFETTI ? spd * 0.6f : 0), life * frand(0.7f, 1.2f), col, size);
+  }
+}
+
+static void confetti(float x, float y, int n) {
+  for (int i = 0; i < n; i++) {
+    float a = frand(3.6f, 5.8f), s = frand(120, 320);
+    emit(PK_CONFETTI, x, y, cosf(a) * s, sinf(a) * s, frand(1.2f, 2.2f), hsv(random(0, 360)), frand(2, 4));
+  }
+}
+
+static void updateParts(float dt) {
+  for (auto &p : parts) {
+    if (p.life <= 0) continue;
+    p.life -= dt;
+    float g = 0;
+    switch (p.kind) {
+      case PK_CRUMB: g = 380; break;
+      case PK_CONFETTI: g = 170; p.vx *= powf(0.4f, dt); break;
+      case PK_SHARD: g = 520; break;
+      case PK_DROP: g = 300; break;
+      case PK_FUR: g = 25; p.vx += sinf(p.life * 6) * 20 * dt; break;
+      case PK_HEART: case PK_Z: p.vx = sinf(p.life * 3 + p.size) * 12; break;
+      default: p.vx *= powf(0.2f, dt); p.vy *= powf(0.2f, dt);
+    }
+    p.vy += g * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    if ((p.kind == PK_SHARD || p.kind == PK_CRUMB) && p.y > room::CAT_Y - 3) {
+      p.y = room::CAT_Y - 3;
+      p.vy = -p.vy * 0.3f;
+      p.vx *= 0.6f;
+    }
+  }
+}
+
+static void dotA(uint16_t *fb, int x, int y, uint16_t c, int a) {
+  if ((unsigned)x < (unsigned)W && (unsigned)y < (unsigned)H) fb[y * W + x] = blend(fb[y * W + x], c, a);
+}
+
+static void heartShape(float x, float y, float s, uint16_t col, int a) {
+  cg::X.set(x, y, s, false);
+  int l = cg::ell(-4, -2, 4.6f, 4.6f, 0, col);
+  int r = cg::ell(4, -2, 4.6f, 4.6f, 0, col);
+  int t = cg::tri(-8.6f, -0.5f, 8.6f, -0.5f, 0, 9, col);
+  cg::alpha(l, a);
+  cg::alpha(r, a);
+  cg::alpha(t, a);
+}
+
+static void drawParts(uint16_t *fb) {
+  cg::begin();
+  for (auto &p : parts) {
+    if (p.life <= 0) continue;
+    float k = constrain(p.life / p.max, 0.0f, 1.0f);
+    int a = (int)(255 * fminf(1, k * 2));
+    int x = (int)p.x, y = (int)p.y;
+    switch (p.kind) {
+      case PK_HEART: heartShape(p.x, p.y, p.size / 9, p.col, a); break;
+      case PK_Z: {
+        char z[2] = {k > 0.5f ? 'Z' : 'z', 0};
+        tiny(fb, z, x, y, blend(rgb(60, 70, 120), p.col, a), p.size > 3 ? 2 : 1);
+        break;
+      }
+      case PK_SPARK:
+        for (int d = -2; d <= 2; d++) {
+          dotA(fb, x + d, y, p.col, a * (3 - abs(d)) / 3);
+          dotA(fb, x, y + d, p.col, a * (3 - abs(d)) / 3);
+        }
+        break;
+      case PK_CONFETTI: fillRect(fb, x, y, (int)p.size, (int)(p.size * (0.5f + 0.5f * fabsf(sinf(p.life * 9)))) + 1, p.col); break;
+      case PK_SHARD: fillTriangle(fb, x, y, x + 3, y + 1, x + 1, y + 4, p.col); break;
+      case PK_FUR: fillCircle(fb, x, y, 1, blend(fb[constrain(y, 0, H - 1) * W + constrain(x, 0, W - 1)], p.col, a)); break;
+      case PK_DUST:
+        for (int j = -2; j <= 2; j++)
+          for (int i = -2; i <= 2; i++)
+            if (i * i + j * j <= 4) dotA(fb, x + i, y + j, p.col, a / 3);
+        break;
+      default: fillRect(fb, x, y, 2, 2, p.col);
+    }
+  }
+  cg::render(fb);
+}
+
+// ---------- Speech bubble and toast ----------
+enum Icon : uint8_t {
+  IC_NONE, IC_HEART, IC_FISH, IC_ZZZ, IC_BALL, IC_EXCL, IC_Q, IC_SPARK, IC_BOWL, IC_YARN, IC_BRUSH, IC_MOON,
+  IC_DOTS, IC_TREAT, IC_LASER, IC_FEATHER, IC_PAD, IC_HANGER, IC_HOUSE, IC_CAMERA, IC_PHOTOS, IC_GEAR,
+  IC_MOUSE, IC_BOLT, IC_LOCK, IC_X, IC_STAR, IC_KEYS
+};
+static char bubbleText[28] = "";
+static uint8_t bubbleIcon = IC_NONE;
+static uint32_t bubbleUntil = 0;
+static char toastText[44] = "";
+static uint16_t toastCol = WHITE;
+static uint32_t toastUntil = 0;
+
+static void say(const char *t, uint8_t icon = IC_NONE, uint32_t ms = 2200) {
+  strlcpy(bubbleText, t, sizeof(bubbleText));
+  bubbleIcon = icon;
+  bubbleUntil = millis() + ms;
+}
+
+static void toast(const char *t, uint16_t col = WHITE, uint32_t ms = 2600) {
+  strlcpy(toastText, t, sizeof(toastText));
+  toastCol = col;
+  toastUntil = millis() + ms;
+}
+
+// ---------- Small icons (about 16 px) ----------
+static void icon(uint16_t *fb, uint8_t ic, int cx, int cy, uint16_t c) {
+  switch (ic) {
+    case IC_HEART:
+      fillCircle(fb, cx - 3, cy - 2, 4, c);
+      fillCircle(fb, cx + 3, cy - 2, 4, c);
+      fillTriangle(fb, cx - 7, cy, cx + 7, cy, cx, cy + 7, c);
+      break;
+    case IC_FISH:
+      fillCircle(fb, cx - 2, cy, 4, c);
+      fillRect(fb, cx - 5, cy - 3, 6, 7, c);
+      fillTriangle(fb, cx + 2, cy, cx + 8, cy - 5, cx + 8, cy + 5, c);
+      pixel(fb, cx - 4, cy - 1, BLACK);
+      break;
+    case IC_ZZZ: tiny(fb, "z", cx - 6, cy - 2, c); tiny(fb, "Z", cx - 1, cy - 7, c); break;
+    case IC_BALL:
+    case IC_YARN:
+      fillCircle(fb, cx, cy, 6, c);
+      line(fb, cx - 5, cy - 2, cx + 5, cy + 2, dim(c));
+      line(fb, cx - 4, cy + 3, cx + 3, cy - 5, dim(c));
+      if (ic == IC_YARN) line(fb, cx + 5, cy + 3, cx + 9, cy + 7, c);
+      break;
+    case IC_EXCL: fillRect(fb, cx - 1, cy - 7, 3, 9, c); fillRect(fb, cx - 1, cy + 4, 3, 3, c); break;
+    case IC_Q: tiny(fb, "?", cx - 2, cy - 4, c, 1); break;
+    case IC_SPARK:
+    case IC_STAR:
+      fillTriangle(fb, cx, cy - 8, cx - 3, cy, cx + 3, cy, c);
+      fillTriangle(fb, cx, cy + 8, cx - 3, cy, cx + 3, cy, c);
+      fillTriangle(fb, cx - 8, cy, cx, cy - 3, cx, cy + 3, c);
+      fillTriangle(fb, cx + 8, cy, cx, cy - 3, cx, cy + 3, c);
+      break;
+    case IC_BOWL:
+      fillTriangle(fb, cx - 9, cy - 1, cx + 9, cy - 1, cx + 5, cy + 6, c);
+      fillTriangle(fb, cx - 9, cy - 1, cx + 5, cy + 6, cx - 5, cy + 6, c);
+      fillCircle(fb, cx - 3, cy - 3, 2, rgb(170, 110, 60));
+      fillCircle(fb, cx + 2, cy - 3, 2, rgb(170, 110, 60));
+      break;
+    case IC_BRUSH:
+      fillRoundRect(fb, cx - 8, cy - 2, 16, 6, 2, c);
+      for (int k = 0; k < 6; k++) vline(fb, cx - 7 + k * 3, cy + 4, 4, c);
+      fillRect(fb, cx - 2, cy - 8, 4, 6, c);
+      break;
+    case IC_MOON:
+      fillCircle(fb, cx, cy, 7, c);
+      fillCircle(fb, cx + 4, cy - 3, 6, CARD);
+      break;
+    case IC_DOTS: for (int k = -1; k <= 1; k++) fillCircle(fb, cx + k * 6, cy, 2, c); break;
+    case IC_TREAT:
+      fillCircle(fb, cx, cy, 6, c);
+      for (int k = 0; k < 4; k++) fillCircle(fb, cx - 3 + (k % 2) * 5, cy - 3 + (k / 2) * 5, 1, rgb(120, 70, 30));
+      break;
+    case IC_LASER:
+      fillCircle(fb, cx, cy, 3, rgb(255, 50, 50));
+      for (int k = 0; k < 4; k++) {
+        float a = k * 1.5708f + 0.785f;
+        line(fb, cx + (int)(cosf(a) * 5), cy + (int)(sinf(a) * 5), cx + (int)(cosf(a) * 8), cy + (int)(sinf(a) * 8), c);
+      }
+      break;
+    case IC_FEATHER:
+      thickLine(fb, cx - 6, cy + 7, cx + 6, cy - 7, c);
+      for (int k = 0; k < 4; k++) line(fb, cx - 3 + k * 3, cy + 3 - k * 3, cx - 7 + k * 3, cy - 1 - k * 3, c);
+      break;
+    case IC_PAD:
+      fillRoundRect(fb, cx - 9, cy - 5, 18, 11, 4, c);
+      fillRect(fb, cx - 6, cy - 1, 5, 2, CARD);
+      fillRect(fb, cx - 4, cy - 3, 2, 5, CARD);
+      fillCircle(fb, cx + 4, cy - 1, 1, CARD);
+      fillCircle(fb, cx + 6, cy + 1, 1, CARD);
+      break;
+    case IC_HANGER:
+      line(fb, cx - 9, cy + 5, cx, cy - 2, c);
+      line(fb, cx + 9, cy + 5, cx, cy - 2, c);
+      hline(fb, cx - 9, cy + 5, 19, c);
+      circle(fb, cx, cy - 5, 2, c);
+      break;
+    case IC_HOUSE:
+      fillTriangle(fb, cx - 9, cy - 1, cx + 9, cy - 1, cx, cy - 9, c);
+      fillRect(fb, cx - 6, cy - 1, 12, 9, c);
+      fillRect(fb, cx - 2, cy + 3, 4, 5, CARD);
+      break;
+    case IC_CAMERA:
+      fillRoundRect(fb, cx - 9, cy - 5, 18, 12, 3, c);
+      fillRect(fb, cx - 4, cy - 8, 8, 3, c);
+      fillCircle(fb, cx, cy + 1, 4, CARD);
+      fillCircle(fb, cx, cy + 1, 2, c);
+      break;
+    case IC_PHOTOS:
+      rect(fb, cx - 8, cy - 6, 14, 12, c);
+      fillRect(fb, cx - 5, cy - 3, 14, 12, c);
+      fillTriangle(fb, cx - 3, cy + 7, cx + 2, cy + 1, cx + 6, cy + 7, CARD);
+      break;
+    case IC_GEAR:
+      for (int k = 0; k < 8; k++) {
+        float a = k * 0.785f;
+        fillCircle(fb, cx + (int)(cosf(a) * 7), cy + (int)(sinf(a) * 7), 2, c);
+      }
+      fillCircle(fb, cx, cy, 6, c);
+      fillCircle(fb, cx, cy, 2, CARD);
+      break;
+    case IC_MOUSE:
+      fillCircle(fb, cx, cy + 1, 5, c);
+      fillCircle(fb, cx - 4, cy - 4, 3, c);
+      fillCircle(fb, cx + 4, cy - 4, 3, c);
+      line(fb, cx + 5, cy + 4, cx + 9, cy + 7, c);
+      break;
+    case IC_BOLT:
+      fillTriangle(fb, cx + 2, cy - 8, cx - 4, cy + 1, cx + 1, cy + 1, c);
+      fillTriangle(fb, cx - 1, cy - 1, cx + 4, cy - 1, cx - 2, cy + 8, c);
+      break;
+    case IC_LOCK:
+      roundRect(fb, cx - 4, cy - 7, 8, 8, 3, c);
+      fillRoundRect(fb, cx - 6, cy - 2, 12, 9, 2, c);
+      break;
+    case IC_X:
+      thickLine(fb, cx - 5, cy - 5, cx + 5, cy + 5, c);
+      thickLine(fb, cx - 5, cy + 5, cx + 5, cy - 5, c);
+      break;
+    case IC_KEYS:
+      fillRoundRect(fb, cx - 9, cy - 5, 18, 11, 2, c);
+      for (int r = 0; r < 2; r++)
+        for (int k = 0; k < 4; k++) fillRect(fb, cx - 7 + k * 4 + r, cy - 3 + r * 4, 3, 2, CARD);
+      break;
+    default: break;
+  }
+}
+
+// ---------- The world ----------
+static room::Env E;
+static bool pcBusy = false, focusWork = false;
+static float worldT = 0;
+
+static void updateEnv() {
+  E = room::Env();
+  if (net::timeValid() && clockapp::tzKnown) {
+    time_t t = time(nullptr) + clockapp::tzOffset;
+    struct tm tm;
+    gmtime_r(&t, &tm);
+    E.hour = tm.tm_hour + tm.tm_min / 60.0f;
+    E.timeKnown = true;
+  }
+  if (clockapp::haveWeather) {
+    switch (clockapp::kindOf(clockapp::code)) {
+      case clockapp::K_PARTLY: case clockapp::K_CLOUDY: E.wx = room::W_CLOUDY; break;
+      case clockapp::K_FOG: E.wx = room::W_FOG; break;
+      case clockapp::K_DRIZZLE: case clockapp::K_RAIN: E.wx = room::W_RAIN; break;
+      case clockapp::K_SNOW: E.wx = room::W_SNOW; break;
+      case clockapp::K_STORM: E.wx = room::W_STORM; break;
+      default: E.wx = room::W_CLEAR;
+    }
+  }
+  pcBusy = pcstats::S.lastData && (int32_t)(millis() - pcstats::S.lastData) < 3000 && pcstats::S.v[0] > 55;
+  focusWork = focus::running && !focus::isBreak;
+}
+
+static int today() {
+  if (!(net::timeValid() && clockapp::tzKnown)) return -1;
+  return (int)((time(nullptr) + clockapp::tzOffset) / 86400);
+}
+
+// ---------- Props state ----------
+enum CupState : uint8_t { CUP_ON, CUP_FALLING, CUP_BROKEN };
+static uint8_t cupState = CUP_ON;
+static float cupX = room::TABLE_X0 + 12, cupY = 0, cupVx = 0, cupVy = 0, cupRot = 0;
+static uint32_t cupBack = 0;
+static float boxX = -1;                       // < 0: no box
+static uint32_t boxUntil = 0;
+static float bowlX = -1, bowlFood = 0;
+static uint8_t foodKind = 0;
+
+// ---------- Chindi ----------
+enum Act : uint8_t {
+  IDLE, WANDER, LOAFING, GROOMING, KNEADING, STARING, ZOOMIES, CUPPUSH, BOXSIT, SUNBATHE, WINDOWWATCH,
+  LAPTOP, SLEEPING, EATING, WORKING, ANNOYED, SWAT, SNEEZE, KBWALK, YAWN, REFUSE, CELEBRATE, PLAY
+};
+struct Cat {
+  float x = 130, hop = 0, hopV = 0, base = room::CAT_Y;
+  uint8_t act = IDLE, stage = 0;
+  float t = 0, dur = 4, goal = 130, aux = 0;
+  bool left = false;
+  float phase = 0;
+  uint8_t pose = kitty::SIT;
+  // expression, smoothed towards these
+  float eyeT = 1, pupilT = 0.3f, earT = 0, tiltT = 0, lookXT = 0, lookYT = 0, purrT = 0, puffT = 0, swingT = 1;
+  bool happy = false;
+  uint8_t mouth = kitty::M_CLOSED;
+  float blinkIn = 3, blinkLeft = 0, lookIn = 2, twitchIn = 4, slowBlink = 0;
+  float petting = 0;
+  Look L;
+};
+static Cat C;
+static bool lightsOff = false;
+
+static void setAct(uint8_t a, float dur = 4) {
+  C.act = a;
+  C.stage = 0;
+  C.t = 0;
+  C.dur = dur;
+}
+
+static bool walkTo(float gx, float speed, float dt) {
+  float dx = gx - C.x;
+  if (fabsf(dx) < 2) {
+    C.x = gx;
+    return true;
+  }
+  C.left = dx < 0;
+  C.x += (dx > 0 ? 1 : -1) * fminf(speed * dt, fabsf(dx));
+  C.pose = speed > 140 ? kitty::RUN : kitty::WALK;
+  C.phase += dt * speed * (speed > 140 ? 0.07f : 0.11f);
+  return false;
+}
+
+static void hopUp(float v) {
+  if (C.hop <= 0) C.hopV = v;
+}
+
+static bool frontPose() {
+  return C.pose == kitty::SIT || C.pose == kitty::LOAF || C.pose == kitty::GROOM || C.pose == kitty::KNEAD;
+}
+
+static void celebrate(const char *msg) {
+  setAct(CELEBRATE, 1.8f);
+  confetti(C.x, kitty::hit.top + 20, 50);
+  say(msg, IC_HEART, 2600);
+}
+
+static int prevLevel = 1;
+static void addXP(int n) {
+  int before = level();
+  P.xp += n;
+  dirty = true;
+  int now = level();
+  if (now > before) {
+    char s[44];
+    snprintf(s, sizeof(s), "Level %d! %s", now, unlockText(now));
+    toast(s, rgb(255, 200, 80), 4000);
+    if (open) celebrate("level up!");
+    saveNow();
+  }
+  prevLevel = now;
+}
+
+// first interaction of a new day: keep the streak going
+static void touchDay() {
+  int d = today();
+  if (d < 0 || d == P.lastDay) return;
+  P.streak = (P.lastDay >= 0 && d == P.lastDay + 1) ? P.streak + 1 : 1;
+  P.lastDay = d;
+  if (P.streak > 1) {
+    P.treats++;
+    char s[44];
+    snprintf(s, sizeof(s), "Day %d streak! +1 treat", P.streak);
+    toast(s, rgb(255, 170, 60), 3500);
+    if (open) confetti(160, 60, 40);
+  }
+  saveNow();
+}
+
+// ---------- Background: needs, keyboard walk, Focus link ----------
+static uint32_t kbNext = 0, kbNextChar = 0, kbToastUntil = 0;
+static char kbText[16] = "";
+static uint8_t kbIdx = 0, kbLen = 0;
+static int lastSessions = -1;
+static bool lastFocusRunning = false, needBreak = false, pendingTreat = false, yawnPending = false;
+
+static void kbSchedule(uint32_t now, uint32_t inMs) { kbNext = now + inMs; }
+
+static void kbStart(uint32_t now) {
+  if (C.act == SLEEPING) {                   // asleep: no walking about
+    kbSchedule(now, 10 * 60000UL);
+    return;
+  }
+  static const char *const SOUNDS[] = {"mrrrp", "mrow", "prrrr", "mew", "nyaa"};
+  char s[16];
+  strlcpy(s, SOUNDS[random(0, 5)], sizeof(s));
+  int mash = random(3, 7);                   // paws on random keys
+  for (int i = 0; i < mash && strlen(s) < 14; i++) {
+    char c[2] = {"jkl;asdf"[random(0, 8)], 0};
+    strlcat(s, c, sizeof(s));
+  }
+  strlcpy(kbText, s, sizeof(kbText));
+  kbLen = strlen(kbText);
+  kbIdx = 0;
+  kbNextChar = now + 600;
+  kbToastUntil = now + 6000;
+  if (open) setAct(KBWALK, 30);
+  kbSchedule(now, random(25, 61) * 60000UL);
+}
+
+static void begin() {
+  load();
+  began = true;
+  lastSave = millis();
+  kbSchedule(millis(), random(25, 61) * 60000UL);
+  prevLevel = level();
+}
+
+// Called every frame from the main loop, whatever app is open.
+static void tick(uint32_t now, float dt) {
+  if (!began) return;
+  float h = dt / 3600;
+  bool asleep = C.act == SLEEPING && C.stage >= 1;
+  bump(P.hunger, -10 * h);
+  bump(P.fun, (asleep ? -3 : -14) * h);
+  bump(P.clean, -5 * h);
+  bump(P.energy, (asleep ? 45 : -6) * h);
+  bump(P.love, ((P.hunger < 20 || P.fun < 20) ? -8 : -3) * h);
+
+  // keyboard walk
+  if (P.kbWalk && (int32_t)(now - kbNext) >= 0) kbStart(now);
+  if (kbIdx < kbLen && (int32_t)(now - kbNextChar) >= 0) {
+    Keyboard.write((uint8_t)kbText[kbIdx++]);
+    kbNextChar = now + random(90, 230);
+  }
+
+  // Focus: a finished session earns a treat; skipping the break makes her yawn
+  if (lastSessions < 0) lastSessions = focus::sessions;
+  if (focus::sessions > lastSessions) {
+    lastSessions = focus::sessions;
+    P.treats++;
+    addXP(15);
+    pendingTreat = true;
+    needBreak = true;
+    saveNow();
+  }
+  if (focus::running && focus::isBreak) needBreak = false;
+  bool fr = focus::running && !focus::isBreak;
+  if (fr && !lastFocusRunning && needBreak) yawnPending = true;
+  lastFocusRunning = fr;
+
+  if (dirty && now - lastSave > 5 * 60000UL) saveNow();
+}
+
+// ---------- Home screen helpers ----------
+// short status for the home screen, or nullptr
+static const char *homeBadge(uint16_t &col) {
+  if (!began) return nullptr;
+  if ((int32_t)(kbToastUntil - millis()) > 0) { col = rgb(255, 170, 60); return "CHINDI TYPED!"; }
+  if (P.hunger < 25) { col = rgb(255, 160, 70); return "FEED CHINDI"; }
+  if (P.energy < 15) { col = rgb(250, 210, 70); return "CHINDI SLEEPY"; }
+  if (P.fun < 25) { col = rgb(255, 110, 170); return "PLAY?"; }
+  if (P.love < 25) { col = rgb(255, 90, 110); return "PET CHINDI"; }
+  return nullptr;
+}
+
+// Now and then she peeks up from the bottom edge of the home screen.
+static void homePeek(uint16_t *fb, uint32_t now) {
+  static uint32_t next = 15000, start = 0;
+  static float px = 250;
+  if (!began) return;
+  if (!start && (int32_t)(now - next) >= 0) {
+    start = now;
+    px = random(40, 280);
+  }
+  if (!start) return;
+  float t = (now - start) / 1000.0f;
+  if (t > 3.6f) {
+    start = 0;
+    next = now + random(40000, 80000);
+    return;
+  }
+  float up = t < 0.6f ? t / 0.6f : (t > 3 ? (3.6f - t) / 0.6f : 1);
+  up = up * up * (3 - 2 * up);
+  float blink = (t > 1.6f && t < 1.8f) ? 0.05f : 1;
+  kitty::drawHead(fb, px, H + 26 - up * 46, 0.55f, blink, sinf(t * 1.5f) * 0.8f);
+}
+
+static void appIcon(uint16_t *fb, int cx, int cy, uint16_t) {
+  kitty::drawHead(fb, cx, cy + 4, 0.34f, 1, 0);
+}
+
+}  // namespace chindi
+
+#include "chindi_play.h"
