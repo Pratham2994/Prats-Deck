@@ -13,6 +13,8 @@ namespace pcstats {
 // "PC cpu% ram% gpu% cpuTemp gpuTemp downKBs upKBs ramUsedGB ramTotalGB\n" (-1 = unknown)
 // and, when the song changes and every few seconds:
 // "NP state title<TAB>artist\n"   state: 0 = nothing, 1 = playing, 2 = paused
+// A line with only "?" asks the deck how it is. It answers "DECK fps=.. heap=.. up=..":
+// frames a second now, free memory in bytes, seconds since start-up.
 enum { F_CPU_P, F_RAM, F_GPU, F_CPUT, F_GPUT, F_DOWN, F_UP, F_RAMU, F_RAMT, NF };
 static const int HISTN = 150;
 
@@ -56,6 +58,10 @@ static int song(uint32_t now) {
 }
 
 static void parse(char *s) {
+  if (strcmp(s, "?") == 0) {
+    Serial.printf("DECK fps=%d heap=%d up=%lu\n", fps, (int)rp2040.getFreeHeap(), (unsigned long)(millis() / 1000));
+    return;
+  }
   if (strncmp(s, "NP ", 3) == 0) { parseSong(s + 3); return; }
   if (strncmp(s, "PC ", 3) != 0) return;
   char *p = s + 3;
