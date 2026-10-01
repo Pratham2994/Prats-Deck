@@ -1407,6 +1407,7 @@ static void drawToast(uint16_t *fb, uint32_t now) {
 
 // The space under the stats bar shows one message at a time, so that they do not pile up
 // over her face: a toast first, then her speech bubble, then the wish chip.
+// The toast itself is drawn later (drawToast), on top of a sheet if one is open.
 static bool chipShown = false;
 static void messages(uint16_t *fb, uint32_t now, bool chip) {
   bool toastUp = (int32_t)(toastUntil - now) > 0;
@@ -1416,7 +1417,6 @@ static void messages(uint16_t *fb, uint32_t now, bool chip) {
   chipShown = chip && !toastUp && !(bubbleUp && bx < CHIP_X + chipWidth() + 2 && by < CHIP_Y + 20);
   if (chipShown) wishChip(fb, now);
   if (bubbleUp) drawBubble(fb, now);
-  drawToast(fb, now);
 }
 
 struct Tile {
@@ -2068,6 +2068,7 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
       for (int i = 0; i < W * H; i++) fb[i] = blend(fb[i], WHITE, a);
     }
     messages(fb, now, false);
+    drawToast(fb, now);
     return;
   }
   bool sheetWasOpen = sheet != SH_NONE;          // a sheet opened by this frame's tap draws next frame
@@ -2082,6 +2083,7 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
     modeBar(fb, mode == MD_LASER ? "Laser pointer" : mode == MD_FEATHER ? "Feather wand" : mode == MD_YARN ? "Yarn ball" : "Brushing");
     if (mode == MD_BRUSH && T.down && !ui) icon(fb, IC_BRUSH, (int)T.x + 10, (int)T.y - 10, rgb(90, 200, 240));
   }
+  drawToast(fb, now);                            // last: a tall sheet must not hide it
   PROF_MARK(P_DOCK);
 }
 

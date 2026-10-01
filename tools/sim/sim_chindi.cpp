@@ -327,6 +327,14 @@ int main() {
   sheetTile(2, 2, 3);                          // rooms
   step(10);
   shot("c26_rooms_sheet");
+  P.xp = 0;                                    // level 1: a tap on a locked thing gives a toast
+  sheet = SH_WARDROBE;                         // the tallest sheet: it must not hide the toast
+  step(8);
+  sheetTile(5, 2, 3);
+  step(6);
+  shot("c26a_locked_toast");
+  fails += check((int32_t)(toastUntil - millis()) > 0 && sheet == SH_WARDROBE, "a locked item gives a toast, and the sheet stays open");
+  P.xp = 2100;
   sheet = SH_NONE;
   step(3);
   tap(250, 18);
