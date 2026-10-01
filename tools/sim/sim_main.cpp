@@ -6,6 +6,7 @@ RP2040 rp2040;
 SerialSim Serial;
 EEPROMSim EEPROM;
 KeyboardSim Keyboard;
+MouseSim Mouse;
 WiFiSim WiFi;
 NTPSim NTP;
 spi_hw_t spiHw;
@@ -205,7 +206,7 @@ int main() {
   shot("16a_guide_macros");
   goHome();
 
-  tileTap(12);
+  tileTap(13);
   step(10);
   shot("17_settings");
   goHome();
@@ -270,6 +271,28 @@ int main() {
     printf("snake: over %d (want 1), high score %d (want %d)\n", S.over, hi, sc);
   }
   goHome();
+
+  tileTap(12);
+  step(20);
+  shot("21d_trackpad");
+  down(80, 100);                                 // a drag to the right and down
+  for (int k = 0; k < 30; k++) { simX = 80 + k * 3; simY = 100 + k; step(1); }
+  shot("21e_trackpad_drag");
+  up();
+  step(8);
+  printf("trackpad drag: pointer moved %d, %d (want over 80 and over 25), clicks %d (want 0)\n", Mouse.x, Mouse.y, Mouse.clicks);
+  tap(120, 120);
+  printf("trackpad tap: clicks %d (want 1)\n", Mouse.clicks);
+  down(300, 90);                                 // a drag down in the scroll strip
+  for (int k = 0; k < 20; k++) { simY = 90 + k * 4; step(1); }
+  up();
+  step(8);
+  printf("trackpad scroll: wheel %d (want under -5), clicks %d (want 1)\n", Mouse.wheel, Mouse.clicks);
+  tap(160, 222);                                 // Right
+  tap(266, 222);                                 // Hold
+  printf("trackpad buttons: right clicks %d (want 1), held %d (want 1)\n", Mouse.rightClicks, Mouse.held);
+  goHome();
+  printf("trackpad left: held %d (want 0)\n", Mouse.held);
   shot("22_home_end");
   return 0;
 }

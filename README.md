@@ -1,6 +1,6 @@
 # Prats Deck
 
-Thirteen touch apps for the Waveshare Pico-ResTouch-LCD-2.8 on a Raspberry Pi Pico 2 W.
+Fourteen touch apps for the Waveshare Pico-ResTouch-LCD-2.8 on a Raspberry Pi Pico 2 W.
 A small desk companion: a pet cat, a clock with weather, PC controls, a PC monitor, tools and games.
 
 ## Set up
@@ -10,7 +10,7 @@ A small desk companion: a pet cat, a clock with weather, PC controls, a PC monit
 3. Open `Prats-Deck.ino` in Arduino IDE 2.
 4. Install the board package "Raspberry Pi Pico/RP2040/RP2350" by Earle F. Philhower (Boards Manager).
 5. Tools menu: **Board** Raspberry Pi Pico 2W, **CPU Speed** 125 MHz, **Optimize** Small (-Os), the default. Do not use -O3: with board package 6.2.0 it breaks USB, and you then need the BOOTSEL button to upload again.
-6. Click Upload. If the upload fails with "No drive to deploy", close `pc_monitor.py` and the Serial Monitor first.
+6. Click Upload. If the upload fails with "No drive to deploy", close `pc_monitor.py` and the Serial Monitor first, and make sure that Tools > Port shows the deck's port. (Windows gives the deck a new COM port number when its USB set-up changes, as it did when the Trackpad app was added.)
 
 No extra libraries are needed.
 
@@ -36,6 +36,7 @@ No extra libraries are needed.
 | Bricks | The classic game: hit the ball with the bat and break all the bricks. | Drag to move the bat. Tap to launch the ball. You have 3 lives. The high score is saved. |
 | Life | Conway's Game of Life, a famous simulation. Each dot lives or dies by the count of its neighbours. Simple rules make patterns that move and grow. | Draw on the screen to add living dots. Pause, change the speed, or start with a Random field. |
 | Snake | The classic game: the snake grows when it eats. A wall or its own body ends the game. | When it goes sideways, tap above or below its head to turn it. When it goes up or down, tap left or right of its head. Gold food is worth 5. The high score is saved. |
+| Trackpad | The screen is a mouse pad for your PC. The deck works as a USB mouse, so the PC needs no software. | Drag to move the pointer. Tap to click. Drag up or down in the strip at the right to scroll. Bottom buttons: left click, right click, and Hold, which keeps the left button down so that you can drag a window (tap it again to let go). |
 | Settings | Brightness, touch calibration, tear-free screen, Chindi's keyboard walk, device info. | Tap a row to change it. |
 
 ## Chindi

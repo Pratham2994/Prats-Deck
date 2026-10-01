@@ -5,6 +5,7 @@ RP2040 rp2040;
 SerialSim Serial;
 EEPROMSim EEPROM;
 KeyboardSim Keyboard;
+MouseSim Mouse;
 WiFiSim WiFi;
 NTPSim NTP;
 spi_hw_t spiHw;

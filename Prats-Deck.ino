@@ -1,5 +1,5 @@
 // Prats-Deck.ino
-// Prats Deck: 13 touch apps for the Waveshare Pico-ResTouch-LCD-2.8 on a Pico 2 W.
+// Prats Deck: 14 touch apps for the Waveshare Pico-ResTouch-LCD-2.8 on a Pico 2 W.
 //
 //   Chindi     virtual pet cat: feed, pet, play, mini-games, photos
 //   Galaxy     particle galaxy you swirl, drag and flick
@@ -13,6 +13,7 @@
 //   Bricks     Breakout with explosions
 //   Life       Conway's Game of Life with glowing trails
 //   Snake      the classic: tap beside the head to turn
+//   Trackpad   the screen is a mouse pad for your PC over USB
 //   Settings   brightness, touch calibration, tear-free screen, Chindi's keyboard walk
 //
 // Go home from any app: hold the top-left corner for half a second.
@@ -24,6 +25,7 @@
 //               the USB code, and the board then needs BOOTSEL to be flashed again.
 
 #include <Keyboard.h>
+#include <Mouse.h>
 #include "config.h"
 // The sketch's own code is built for speed (about 3 times the frame rate of -Os), whatever
 // the Tools menu says. The board package stays at the menu setting.
@@ -41,6 +43,7 @@
 #include "src/app_bricks.h"
 #include "src/app_life.h"
 #include "src/app_snake.h"
+#include "src/app_trackpad.h"
 #include "src/app_chindi.h"
 #include "src/app_settings.h"
 
@@ -57,9 +60,14 @@ static const App APPS[] = {
   {"Bricks", rgb(255, 150, 60), bricks::icon, bricks::enter, bricks::frame, bricks::leave},
   {"Life", rgb(140, 255, 120), life::icon, life::enter, life::frame, life::leave},
   {"Snake", rgb(120, 230, 110), snake::icon, snake::enter, snake::frame, snake::leave},
+  {"Trackpad", rgb(120, 200, 255), trackpad::icon, trackpad::enter, trackpad::frame, trackpad::leave},
   {"Settings", rgb(180, 180, 200), settings::icon, settings::enter, settings::frame, settings::leave},
 };
 static const int NAPPS = sizeof(APPS) / sizeof(APPS[0]);
+
+#ifdef DECK_USB_TEST
+extern "C" bool tud_mounted(void);             // TinyUSB: the PC has set the deck up as a USB device
+#endif
 
 static int cur = -1;                           // running app, -1 = home
 static uint32_t homeSince = 0;                 // taps on home count only for presses after this
@@ -169,6 +177,7 @@ static void homeButton(uint16_t *fb, uint32_t now) {
 void setup() {
   Serial.begin(115200);
   Keyboard.begin();
+  Mouse.begin();
   EEPROM.begin(1024);
   lcdBegin();
   settings::begin();
@@ -193,6 +202,11 @@ void loop() {
   float dt = constrain((us - lastUs) / 1e6f, 0.001f, 0.1f);
   lastUs = us;
 
+#ifdef DECK_USB_TEST
+  // For a test of a change to the USB set-up. No PC after 12 s means that USB is broken:
+  // go to boot mode, where a new firmware can be flashed with no button press.
+  if (now > 12000 && !tud_mounted()) rp2040.rebootToBootloader();
+#endif
   lcdWait();                                   // previous frame finished sending
 #ifdef DECK_PROF
   uint32_t p1 = micros();

@@ -109,6 +109,19 @@ struct KeyboardSim {
 };
 extern KeyboardSim Keyboard;
 
+// ---- USB mouse ----
+enum { MOUSE_LEFT = 1, MOUSE_RIGHT = 2 };
+struct MouseSim {
+  int x = 0, y = 0, wheel = 0, clicks = 0, rightClicks = 0;
+  bool held = false;
+  void begin() {}
+  void move(int dx, int dy, signed char w = 0) { x += dx; y += dy; wheel += w; }
+  void click(uint8_t b = MOUSE_LEFT) { (b == MOUSE_RIGHT ? rightClicks : clicks)++; }
+  void press(uint8_t = MOUSE_LEFT) { held = true; }
+  void release(uint8_t = MOUSE_LEFT) { held = false; }
+};
+extern MouseSim Mouse;
+
 // ---- Wi-Fi ----
 enum { WIFI_STA };
 enum { WL_IDLE_STATUS = 0, WL_CONNECTED = 3 };
