@@ -1327,13 +1327,21 @@ static void wishChip(uint16_t *fb, uint32_t now) {
   if (tapIn(x, CHIP_Y - 2, cw, 22) && mode == MD_NORMAL) toast(WISH_HINTS[w], col, 3200);
 }
 
+// where her speech bubble goes. false: there is no bubble now
+static bool bubbleBox(uint32_t now, int &x, int &y, int &w, int &h) {
+  if ((int32_t)(bubbleUntil - now) <= 0) return false;
+  w = (bubbleText[0] ? textWidth(SMALL, bubbleText) : 0) + (bubbleIcon ? 20 : 0) + 18;
+  h = 24;
+  x = constrain((int)hit.hx - w / 2, 4, W - 4 - w);
+  y = max(42, (int)hit.top - h - 8);
+  return true;
+}
+
 static void drawBubble(uint16_t *fb, uint32_t now) {
-  if ((int32_t)(bubbleUntil - now) <= 0) return;
+  int x, y, w, h;
+  if (!bubbleBox(now, x, y, w, h)) return;
   int tw = bubbleText[0] ? textWidth(SMALL, bubbleText) : 0;
   int iw = bubbleIcon ? 20 : 0;
-  int w = tw + iw + 18, h = 24;
-  int x = constrain((int)hit.hx - w / 2, 4, W - 4 - w);
-  int y = max(42, (int)hit.top - h - 8);
   fillRoundRect(fb, x + 1, y + 2, w, h, 12, rgb(40, 30, 30));      // soft shadow
   fillRoundRect(fb, x, y, w, h, 12, WHITE);
   int tx = constrain((int)hit.hx, x + 12, x + w - 12);
@@ -1342,13 +1350,28 @@ static void drawBubble(uint16_t *fb, uint32_t now) {
   if (tw) text(fb, SMALL, bubbleText, x + 9 + iw, y + 17, rgb(50, 40, 40));
 }
 
+static const int TOAST_Y = 40, TOAST_H = 22;     // the toast takes the row of the wish chip
 static void drawToast(uint16_t *fb, uint32_t now) {
   if ((int32_t)(toastUntil - now) <= 0) return;
   int w = textWidth(SMALL, toastText) + 24;
-  int x = (W - w) / 2, y = 63;
-  fillRoundRect(fb, x, y, w, 22, 11, CARD);
-  roundRect(fb, x, y, w, 22, 11, toastCol);
+  int x = (W - w) / 2, y = TOAST_Y;
+  fillRoundRect(fb, x, y, w, TOAST_H, 11, CARD);
+  roundRect(fb, x, y, w, TOAST_H, 11, toastCol);
   text(fb, SMALL, toastText, x + 12, y + 16, toastCol);
+}
+
+// The space under the stats bar shows one message at a time, so that they do not pile up
+// over her face: a toast first, then her speech bubble, then the wish chip.
+static bool chipShown = false;
+static void messages(uint16_t *fb, uint32_t now, bool chip) {
+  bool toastUp = (int32_t)(toastUntil - now) > 0;
+  int bx, by, bw, bh;
+  bool bubbleUp = bubbleBox(now, bx, by, bw, bh);
+  if (bubbleUp && toastUp && by < TOAST_Y + TOAST_H + 2) bubbleUp = false;
+  chipShown = chip && !toastUp && !(bubbleUp && bx < CHIP_X + chipWidth() + 2 && by < CHIP_Y + 20);
+  if (chipShown) wishChip(fb, now);
+  if (bubbleUp) drawBubble(fb, now);
+  drawToast(fb, now);
 }
 
 struct Tile {
@@ -1617,7 +1640,7 @@ static bool onUI(float x, float y) {
   if (inHomeCorner(x, y)) return true;
   if (mode == MD_PHOTO) return y > 196;
   if (x >= 30 && y < 40) return true;              // stats card
-  if (mode == MD_NORMAL && x >= CHIP_X && x < CHIP_X + chipWidth() && y >= CHIP_Y - 2 && y < CHIP_Y + 20) return true;   // wish chip
+  if (chipShown && x >= CHIP_X && x < CHIP_X + chipWidth() && y >= CHIP_Y - 2 && y < CHIP_Y + 20) return true;   // wish chip
   if (sheet != SH_NONE) return true;
   if (y >= 203 && x >= 34 && x < 286) return true; // dock or mode bar
   return false;
@@ -1971,7 +1994,7 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
   float lightK = E.timeKnown ? E.light() : 1;
   if (lightsOff) lightK *= 0.55f;
   darken(fb, lightK);
-  if (P.room == room::LIVING) room::fountainGlow(fb, (1 - lightK) * 1.6f);
+  if (P.room == room::LIVING) room::fountainGlow(fb, fminf((1 - lightK) * 3.6f, 1.1f));
 
   // ---- UI ----
   if (mode == MD_PHOTO) {
@@ -1994,15 +2017,12 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
       int a = 255 - fl;
       for (int i = 0; i < W * H; i++) fb[i] = blend(fb[i], WHITE, a);
     }
-    drawBubble(fb, now);
-    drawToast(fb, now);
+    messages(fb, now, false);
     return;
   }
   bool sheetWasOpen = sheet != SH_NONE;          // a sheet opened by this frame's tap draws next frame
   statsCard(fb, now);
-  if (mode == MD_NORMAL && !sheetWasOpen) wishChip(fb, now);
-  drawBubble(fb, now);
-  drawToast(fb, now);
+  messages(fb, now, mode == MD_NORMAL && !sheetWasOpen);
   if (mode == MD_NORMAL) {
     if (sheetWasOpen) sheets(fb);
     else if (sheet == SH_NONE) dock(fb);

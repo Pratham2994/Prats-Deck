@@ -12,11 +12,14 @@ Paste this file into a new Claude Code session to continue the project.
 
 - Board package: "Raspberry Pi Pico/RP2040/RP2350" by Earle F. Philhower. Version 6.2.0 was used.
   Boards Manager URL: `https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json`
-- Board: Raspberry Pi Pico 2W. **CPU Speed: 125 MHz** (SPI = clk_peri / 2 = 62.5 MHz, the ST7789 rating). **Optimize: -O3**. Flash size: leave at the default.
+- Board: Raspberry Pi Pico 2W. **CPU Speed: 125 MHz** (SPI = clk_peri / 2 = 62.5 MHz, the ST7789 rating). **Optimize: Small (-Os)**, the default. Flash size: leave at the default.
+- **Do not use -O3 in the Tools menu.** With board package 6.2.0 the board then sends a bad USB descriptor (Windows: "Invalid Configuration Descriptor"). There is no COM port after that, so you need BOOTSEL to upload again. The fault is in the package's USB code, not in the sketch.
+- The sketch's own code is built with `#pragma GCC optimize ("O2")` (top of `Prats-Deck.ino`). On the board this gave about 3 times the frame rate of -Os. -O3 in the pragma gave no more speed.
 - No extra libraries. The fonts are in `src/fonts/inter.h` (Inter, SIL Open Font License).
 - The sketch folder must be named `Prats-Deck`, the same as `Prats-Deck.ino`.
 - Command-line build (arduino-cli ships inside the IDE, under `resources/app/lib/backend/resources`):
-  `arduino-cli compile --fqbn "rp2040:rp2040:rpipico2w:freq=125,opt=Optimize3" --warnings all Prats-Deck`
+  `arduino-cli compile --fqbn "rp2040:rp2040:rpipico2w:freq=125,opt=Small" --warnings all Prats-Deck`
+- Do not start two builds of the sketch at the same time (Verify and Upload together). They share one build folder, and the link then fails with "access beyond end of merged section".
 - Uploading fails with "No drive to deploy" when another program (`pc_monitor.py`, the Serial Monitor) holds the COM port. Close it first, or hold BOOTSEL while plugging in.
 - `config.h` holds the Wi-Fi password. It is in `.gitignore`. `config.example.h` is the template.
 
@@ -59,7 +62,9 @@ python ppm2png.py                                                               
 ## Status
 
 - Everything compiles with the real compiler. The simulator covers all features and its checks pass.
-- **Not tested on the real board yet:** all of the 2026-10 rework. Most important: the tear-free mode (it needs the screen to answer on SPI; the picture direction in that mode comes from the ST7789 data sheet, not from a test), the speed of Chindi with the new drawing, real Wi-Fi weather on the home page, the scope ADC, and Windows media keys.
+- On the board (2026-10-02): the firmware starts and USB works. Chindi (living room, by day) ran at 5 frames a second with -Os. With the O2 pragma and quicker drawing code (colour fades, rings, lines, cat shapes) it runs at 26 to 30.
+- In that test the tear-free mode was off (`lcdSync` was 0). The cause was not examined: the screen gave no answer, or the switch in Settings is off.
+- **Not tested on the real board yet:** the tear-free mode (it needs the screen to answer on SPI; the picture direction in that mode comes from the ST7789 data sheet, not from a test), real Wi-Fi weather on the home page, the scope ADC, and Windows media keys.
 - If the picture is turned or mirrored with the tear-free mode on: switch it off in Settings (or set `TEAR_FREE = false` in `display.h`) and correct `lcdTurn`.
 
 ## Working rules (from the user's CLAUDE.md)

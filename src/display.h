@@ -440,20 +440,25 @@ static void gradRect(uint16_t *fb, int x, int y, int w, int h, uint16_t top, uin
     int k = h > 1 ? j * 256 / (h - 1) : 0;
     // colour in 1/16 steps of 8-bit, so the dither has something to work with
     int r = (tr * 16) + (br - tr) * k / 16, g = (tg * 16) + (bg - tg) * k / 16, b = (tb * 16) + (bb - tb) * k / 16;
-    uint16_t *p = fb + py * W;
-    for (int px = x0; px < x1; px++) {
-      int d = BAYER[py & 3][px & 3];
+    uint16_t pat[4];                           // the dots repeat every 4 pixels along a row
+    for (int i = 0; i < 4; i++) {
+      int d = BAYER[py & 3][i];
       int rr = min(255, (r + d * 8) >> 4), gg = min(255, (g + d * 4) >> 4), bl = min(255, (b + d * 8) >> 4);
-      p[px] = ((rr & 0xF8) << 8) | ((gg & 0xFC) << 3) | (bl >> 3);
+      pat[i] = ((rr & 0xF8) << 8) | ((gg & 0xFC) << 3) | (bl >> 3);
     }
+    uint16_t *p = fb + py * W + x0;
+    int n = x1 - x0;
+    for (int i = 0; i < n && i < 4; i++) p[i] = pat[(x0 + i) & 3];
+    for (int done = 4; done < n; done *= 2) memcpy(p + done, p, min(done, n - done) * 2);   // copy the 4 along the row
   }
 }
 
 // Smooth line with round ends, `width` pixels wide.
 static void strokeLine(uint16_t *fb, float x0, float y0, float x1, float y1, float width, uint16_t col) {
   float dx = x1 - x0, dy = y1 - y0, len2 = dx * dx + dy * dy, hw = width * 0.5f;
+  const float ilen2 = len2 > 1e-6f ? 1 / len2 : 0;
   auto plot = [&](int px, int py) {
-    float t = len2 > 1e-6f ? ((px - x0) * dx + (py - y0) * dy) / len2 : 0;
+    float t = ((px - x0) * dx + (py - y0) * dy) * ilen2;
     t = t < 0 ? 0 : (t > 1 ? 1 : t);
     float ex = px - (x0 + t * dx), ey = py - (y0 + t * dy);
     pixelA(fb, px, py, col, hw + 0.5f - sqrtf(ex * ex + ey * ey));
@@ -623,18 +628,38 @@ static void fillTriangle(uint16_t *fb, int x0, int y0, int x1, int y1, int x2, i
   }
 }
 
+// atan2f for drawing: a polynomial, much quicker than the library, and right to 0.0001 rad.
+static inline float atan2Fast(float y, float x) {
+  float ax = fabsf(x), ay = fabsf(y), mx = fmaxf(ax, ay);
+  if (mx == 0) return 0;
+  float z = fminf(ax, ay) / mx, z2 = z * z;
+  float a = z * (0.99997726f + z2 * (-0.33262347f + z2 * (0.19354346f + z2 * (-0.11643287f + z2 * (0.05265332f + z2 * -0.01172120f)))));
+  if (ay > ax) a = 1.5707963f - a;
+  if (x < 0) a = 3.1415927f - a;
+  return y < 0 ? -a : a;
+}
+
 // Ring segment from angle a0 to a1 (radians, 0 = up, clockwise), radii r0..r1.
 // col0 -> col1 colour gradient along the arc.
 static void arc(uint16_t *fb, int cx, int cy, int r0, int r1, float a0, float a1, uint16_t col0, uint16_t col1) {
   const float TWO_PI_F = 6.2831853f;
   float span = a1 - a0;
   if (span <= 0) return;
+  bool whole = col0 == col1 && a0 <= 0 && a1 >= TWO_PI_F;   // a full ring in one colour needs no angles
+  // 4 x (distance squared), in whole numbers: no ring at all outside lo..hi, solid ring inside slo..shi
+  const int lo = r0 > 0 ? (2 * r0 - 1) * (2 * r0 - 1) : -1, hi = (2 * r1 + 1) * (2 * r1 + 1);
+  const int slo = (2 * r0 + 1) * (2 * r0 + 1), shi = (2 * r1 - 1) * (2 * r1 - 1);
   for (int y = -r1 - 1; y <= r1 + 1; y++) {
     for (int x = -r1 - 1; x <= r1 + 1; x++) {
-      float d = sqrtf((float)(x * x + y * y));
-      float edge = fminf(d - r0, r1 - d) + 0.5f;         // > 0 inside the ring
-      if (edge <= 0) continue;
-      float a = atan2f((float)x, (float)-y);
+      int d4 = 4 * (x * x + y * y);
+      if (d4 <= lo || d4 >= hi) continue;
+      float edge = 1;                                    // > 0 inside the ring
+      if (d4 < slo || d4 > shi) {
+        float d = sqrtf((float)(x * x + y * y));
+        edge = fminf(d - r0, r1 - d) + 0.5f;
+      }
+      if (whole) { pixelA(fb, cx + x, cy + y, col0, edge); continue; }
+      float a = atan2Fast((float)x, (float)-y);
       if (a < 0) a += TWO_PI_F;
       float k = (a - a0) / span;
       if (k < 0 || k > 1) continue;

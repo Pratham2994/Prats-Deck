@@ -75,9 +75,9 @@ struct Env {
   bool wet() const { return wx == W_RAIN || wx == W_SNOW || wx == W_STORM; }
   float light() const {      // room brightness 0..1 from the time of day
     if (hour >= 7 && hour < 18) return 1;
-    if (hour >= 5 && hour < 7) return 0.55f + 0.45f * (hour - 5) / 2;
-    if (hour >= 18 && hour < 20) return 1 - 0.45f * (hour - 18) / 2;
-    return 0.55f;
+    if (hour >= 5 && hour < 7) return 0.8f + 0.2f * (hour - 5) / 2;
+    if (hour >= 18 && hour < 20) return 1 - 0.2f * (hour - 18) / 2;
+    return 0.8f;               // night: dimmed a little. Half brightness is too dark on the real screen
   }
   float sunX() const { return 300 - (hour - 8) / 9 * 250; }    // sunbeam on the floor
 };

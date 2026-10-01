@@ -139,53 +139,92 @@ static inline void widen(float &l, float &r, float nl, float nr) {
   if (nr > r) r = nr;
 }
 
-// x extent of shape s on screen row y, grown by g. false if the row misses it.
-static bool span(const Shape &s, float y, float g, float &l, float &r) {
+// A shape made ready to be cut into rows. All that stays the same from row to row is worked
+// out here, once, so that a row needs no division.
+struct Prep {
+  const Shape *s;
+  float g;                              // the shape is grown by this much (its outline)
+  float ea4, eb, ec, ei;                // ellipse: terms of the row equation
+  float rad, rad2, dx, dy, L2, radL, idx, idy;   // capsule
+  float m[4];                           // polygon: x step per row of each edge
+};
+
+static void prep(Prep &p, const Shape &s, float g) {
+  p.s = &s;
+  p.g = g;
   switch (s.type) {
     case SH_ELLIPSE: {
       float rx = s.a[2] + g, ry = s.a[3] + g, c = s.a[4], sn = s.a[5];
-      float iA = 1 / (rx * rx), iB = 1 / (ry * ry), dy = y - s.a[1];
+      float iA = 1 / (rx * rx), iB = 1 / (ry * ry);
       float qa = c * c * iA + sn * sn * iB;
-      float qb = 2 * dy * c * sn * (iA - iB);
-      float qc = dy * dy * (sn * sn * iA + c * c * iB) - 1;
-      float disc = qb * qb - 4 * qa * qc;
+      p.ea4 = 4 * qa;
+      p.eb = 2 * c * sn * (iA - iB);
+      p.ec = sn * sn * iA + c * c * iB;
+      p.ei = 1 / (2 * qa);
+      break;
+    }
+    case SH_CAPSULE:
+      p.rad = s.a[4] + g;
+      p.rad2 = p.rad * p.rad;
+      p.dx = s.a[2] - s.a[0];
+      p.dy = s.a[3] - s.a[1];
+      p.L2 = p.dx * p.dx + p.dy * p.dy;
+      p.radL = p.rad * sqrtf(p.L2);
+      p.idx = fabsf(p.dx) > 1e-5f ? 1 / p.dx : 0;
+      p.idy = fabsf(p.dy) > 1e-5f ? 1 / p.dy : 0;
+      break;
+    default:
+      for (int i = 0; i < s.npts; i++) {
+        int j = i + 1 == s.npts ? 0 : i + 1;
+        float h = s.a[2 * j + 1] - s.a[2 * i + 1];
+        p.m[i] = h != 0 ? (s.a[2 * j] - s.a[2 * i]) / h : 0;
+      }
+  }
+}
+
+// x extent of the shape on screen row y. false if the row misses it.
+static bool span(const Prep &p, float y, float &l, float &r) {
+  const Shape &s = *p.s;
+  switch (s.type) {
+    case SH_ELLIPSE: {
+      float dy = y - s.a[1];
+      float qb = dy * p.eb;
+      float disc = qb * qb - p.ea4 * (dy * dy * p.ec - 1);
       if (disc < 0) return false;
       float q = sqrtf(disc);
-      l = s.a[0] + (-qb - q) / (2 * qa);
-      r = s.a[0] + (-qb + q) / (2 * qa);
+      l = s.a[0] + (-qb - q) * p.ei;
+      r = s.a[0] + (-qb + q) * p.ei;
       return true;
     }
     case SH_CAPSULE: {
-      float ax = s.a[0], ay = s.a[1], bx = s.a[2], by = s.a[3], rad = s.a[4] + g;
       bool any = false;
       l = 1e9f;
       r = -1e9f;
       for (int e = 0; e < 2; e++) {           // end circles
-        float cx = e ? bx : ax, cy = e ? by : ay, d = y - cy;
-        if (fabsf(d) <= rad) {
-          float h = sqrtf(rad * rad - d * d);
-          widen(l, r, cx - h, cx + h);
+        float d = y - s.a[2 * e + 1];
+        if (fabsf(d) <= p.rad) {
+          float h = sqrtf(p.rad2 - d * d);
+          widen(l, r, s.a[2 * e] - h, s.a[2 * e] + h);
           any = true;
         }
       }
-      float dx = bx - ax, dyy = by - ay, L2 = dx * dx + dyy * dyy;
-      if (L2 > 1e-4f) {                       // the straight part
-        float L = sqrtf(L2), lo = -1e9f, hi = 1e9f, yy = y - ay;
-        // 0 <= ((x-ax)dx + yy dyy) / L2 <= 1
-        if (fabsf(dx) > 1e-5f) {
-          float x0 = ax + (0 - yy * dyy) / dx, x1 = ax + (L2 - yy * dyy) / dx;
+      if (p.L2 > 1e-4f) {                     // the straight part
+        float ax = s.a[0], lo = -1e9f, hi = 1e9f, yy = y - s.a[1];
+        // 0 <= ((x-ax)dx + yy dy) / L2 <= 1
+        if (p.idx != 0) {
+          float x0 = ax - yy * p.dy * p.idx, x1 = ax + (p.L2 - yy * p.dy) * p.idx;
           lo = fmaxf(lo, fminf(x0, x1));
           hi = fminf(hi, fmaxf(x0, x1));
         } else {
-          float t = yy * dyy / L2;
-          if (t < 0 || t > 1) hi = lo - 1;
+          float u = yy * p.dy;
+          if (u < 0 || u > p.L2) hi = lo - 1;
         }
-        // |(x-ax)dyy - yy dx| <= rad L
-        if (fabsf(dyy) > 1e-5f) {
-          float x0 = ax + (yy * dx - rad * L) / dyy, x1 = ax + (yy * dx + rad * L) / dyy;
+        // |(x-ax)dy - yy dx| <= rad L
+        if (p.idy != 0) {
+          float x0 = ax + (yy * p.dx - p.radL) * p.idy, x1 = ax + (yy * p.dx + p.radL) * p.idy;
           lo = fmaxf(lo, fminf(x0, x1));
           hi = fminf(hi, fmaxf(x0, x1));
-        } else if (fabsf(yy * dx) > rad * L) {
+        } else if (fabsf(yy * p.dx) > p.radL) {
           hi = lo - 1;
         }
         if (hi >= lo) {
@@ -197,16 +236,17 @@ static bool span(const Shape &s, float y, float g, float &l, float &r) {
     }
     default: {                                // convex polygon
       bool any = false;
+      float g = p.g;
       l = 1e9f;
       r = -1e9f;
       // grow: sample the rows g above and below too, and widen by g (good enough for thin lines)
       for (int k = (g > 0 ? -1 : 0); k <= (g > 0 ? 1 : 0); k++) {
         float yy = y + k * g;
         for (int i = 0; i < s.npts; i++) {
-          int j = (i + 1) % s.npts;
-          float x0 = s.a[2 * i], y0 = s.a[2 * i + 1], x1 = s.a[2 * j], y1 = s.a[2 * j + 1];
+          int j = i + 1 == s.npts ? 0 : i + 1;
+          float y0 = s.a[2 * i + 1], y1 = s.a[2 * j + 1];
           if ((yy < y0) == (yy < y1)) continue;
-          float x = x0 + (yy - y0) * (x1 - x0) / (y1 - y0);
+          float x = s.a[2 * i] + (yy - y0) * p.m[i];
           widen(l, r, x - g, x + g);
           any = true;
         }
@@ -231,11 +271,6 @@ static float bottomOf(const Shape &s, float g) {
   }
 }
 
-static inline float cover(float l, float r, int px) {
-  float c = fminf(r, px + 1.0f) - fmaxf(l, (float)px);
-  return c < 0 ? 0 : (c > 1 ? 1 : c);
-}
-
 #ifdef SIM_COUNT
 static long simPixels = 0, simRows = 0;
 static int simPeak = 0;
@@ -244,17 +279,22 @@ static int simPeak = 0;
 static void raster(uint16_t *fb, const Shape &s, bool outline) {
   if (s.alpha == 0) return;                   // invisible: only used to clip others
   float g = outline ? s.ow : 0;
-  const Shape *cl = s.clip >= 0 ? &SH[s.clip] : nullptr;
+  const bool cl = s.clip >= 0;
+  Prep ps, pc;
+  prep(ps, s, g);
+  if (cl) prep(pc, SH[s.clip], 0);
+  const bool fade = !outline && s.col2 != s.col && s.gy1 > s.gy0;
+  const float fadeK = fade ? 256 / (s.gy1 - s.gy0) : 0;
   int y0 = max(0, (int)floorf(topOf(s, g))), y1 = min(H - 1, (int)ceilf(bottomOf(s, g)));
   for (int py = y0; py <= y1; py++) {
     float l[2], r[2];
     bool ok[2];
     for (int k = 0; k < 2; k++) {
       float ys = py + 0.25f + 0.5f * k;
-      ok[k] = span(s, ys, g, l[k], r[k]);
+      ok[k] = span(ps, ys, l[k], r[k]);
       if (ok[k] && cl) {
         float cl0, cr0;
-        if (!span(*cl, ys, 0, cl0, cr0)) ok[k] = false;
+        if (!span(pc, ys, cl0, cr0)) ok[k] = false;
         else {
           l[k] = fmaxf(l[k], cl0);
           r[k] = fminf(r[k], cr0);
@@ -276,22 +316,36 @@ static void raster(uint16_t *fb, const Shape &s, bool outline) {
       in1 = (int)floorf(fminf(r[0], r[1])) - 1;
     }
     uint16_t col = outline ? s.ocol : s.col;
-    if (!outline && s.col2 != s.col && s.gy1 > s.gy0)
-      col = blend(s.col, s.col2, (int)constrain((py - s.gy0) / (s.gy1 - s.gy0) * 256, 0, 256));
+    if (fade) col = blend(s.col, s.col2, (int)constrain((py - s.gy0) * fadeK, 0, 256));
     uint16_t *row = fb + py * W;
 #ifdef SIM_COUNT
     simPixels += x1 - x0 + 1;
 #endif
-    for (int px = x0; px <= x1; px++) {
-      int a;
-      if (px >= in0 && px <= in1) a = s.alpha;
-      else {
-        float c = ((ok[0] ? cover(l[0], r[0], px) : 0) + (ok[1] ? cover(l[1], r[1], px) : 0)) * 0.5f;
-        a = (int)(c * s.alpha);
-        if (a <= 0) continue;
+    // the row is: soft edge pixels, a solid run, soft edge pixels.
+    // How much of an edge pixel the two spans cover is worked out in whole numbers (1/256 pixel).
+    int fl[2] = {0, 0}, fr[2] = {0, 0};
+    for (int k = 0; k < 2; k++)
+      if (ok[k]) { fl[k] = (int)(l[k] * 256); fr[k] = (int)(r[k] * 256); }
+    auto soft = [&](int a0, int a1) {
+      for (int px = a0; px <= a1; px++) {
+        int p0 = px << 8, p1 = p0 + 256;
+        int c = constrain(min(fr[0], p1) - max(fl[0], p0), 0, 256) + constrain(min(fr[1], p1) - max(fl[1], p0), 0, 256);
+        int a = c * s.alpha >> 9;
+        if (a > 0) row[px] = a >= 255 ? col : blend(row[px], col, a + 1);
       }
-      row[px] = a >= 255 ? col : blend(row[px], col, a + 1);
+    };
+    if (in0 > in1) {
+      soft(x0, x1);
+      continue;
     }
+    soft(x0, min(in0 - 1, x1));
+    int i0 = max(in0, x0), i1 = min(in1, x1);
+    if (s.alpha >= 255) {
+      for (int px = i0; px <= i1; px++) row[px] = col;
+    } else {
+      for (int px = i0; px <= i1; px++) row[px] = blend(row[px], col, s.alpha + 1);
+    }
+    soft(max(in1 + 1, x0), x1);
   }
 }
 

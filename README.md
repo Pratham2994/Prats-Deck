@@ -9,7 +9,7 @@ A small desk companion: a pet cat, a clock with weather, PC controls, a PC monit
 2. Make sure the folder is named `Prats-Deck`. Arduino needs the folder and the `.ino` file to have the same name.
 3. Open `Prats-Deck.ino` in Arduino IDE 2.
 4. Install the board package "Raspberry Pi Pico/RP2040/RP2350" by Earle F. Philhower (Boards Manager).
-5. Tools menu: **Board** Raspberry Pi Pico 2W, **CPU Speed** 125 MHz, **Optimize** Optimize Even More (-O3).
+5. Tools menu: **Board** Raspberry Pi Pico 2W, **CPU Speed** 125 MHz, **Optimize** Small (-Os), the default. Do not use -O3: with board package 6.2.0 it breaks USB, and you then need the BOOTSEL button to upload again.
 6. Click Upload. If the upload fails with "No drive to deploy", close `pc_monitor.py` and the Serial Monitor first.
 
 No extra libraries are needed.

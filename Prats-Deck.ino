@@ -19,10 +19,14 @@
 // Arduino IDE, Tools menu:
 //   Board     : Raspberry Pi Pico 2W
 //   CPU Speed : 125 MHz  -> SPI runs at 62.5 MHz, the ST7789 rating
-//   Optimize  : Optimize Even More (-O3)
+//   Optimize  : Small (-Os), the default. Do NOT use -O3: with board package 6.2.0 it breaks
+//               the USB code, and the board then needs BOOTSEL to be flashed again.
 
 #include <Keyboard.h>
 #include "config.h"
+// The sketch's own code is built for speed (about 3 times the frame rate of -Os), whatever
+// the Tools menu says. The board package stays at the menu setting.
+#pragma GCC optimize ("O2")
 #include "src/core.h"
 #include "src/net.h"
 #include "src/app_galaxy.h"
