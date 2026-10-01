@@ -1,6 +1,6 @@
 # Prats Deck
 
-Twelve touch apps for the Waveshare Pico-ResTouch-LCD-2.8 on a Raspberry Pi Pico 2 W.
+Thirteen touch apps for the Waveshare Pico-ResTouch-LCD-2.8 on a Raspberry Pi Pico 2 W.
 A small desk companion: a pet cat, a clock with weather, PC controls, a PC monitor, tools and games.
 
 ## Set up
@@ -35,6 +35,7 @@ No extra libraries are needed.
 | Paint | Paint with light. Lines that cross become brighter. | Drag to paint. Mirror makes 2-way or 6-way patterns. Fade lets old lines go away. Clear starts again. |
 | Bricks | The classic game: hit the ball with the bat and break all the bricks. | Drag to move the bat. Tap to launch the ball. You have 3 lives. The high score is saved. |
 | Life | Conway's Game of Life, a famous simulation. Each dot lives or dies by the count of its neighbours. Simple rules make patterns that move and grow. | Draw on the screen to add living dots. Pause, change the speed, or start with a Random field. |
+| Snake | The classic game: the snake grows when it eats. A wall or its own body ends the game. | When it goes sideways, tap above or below its head to turn it. When it goes up or down, tap left or right of its head. Gold food is worth 5. The high score is saved. |
 | Settings | Brightness, touch calibration, tear-free screen, Chindi's keyboard walk, device info. | Tap a row to change it. |
 
 ## Chindi

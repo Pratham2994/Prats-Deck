@@ -75,7 +75,7 @@ static void shot(const char *name) {
 static void down(int x, int y) { simDown = true; simX = x; simY = y; }
 static void up() { simDown = false; }
 static void tap(int x, int y) { up(); step(6); down(x, y); step(4); up(); step(7); }
-static void tileTap(int i) { tap((i % 4) * 80 + 40, 54 + (i / 4) * 62 + 25); }
+static void tileTap(int i) { tap((i % 5) * 64 + 32, 54 + (i / 5) * 62 + 25); }
 static void goHome() { down(10, 10); step(30); up(); step(8); }
 static int check(bool ok, const char *what) {
   printf("  [%s] %s\n", ok ? "PASS" : "FAIL", what);

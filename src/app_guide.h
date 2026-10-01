@@ -16,7 +16,7 @@ struct Page {
 
 static const Page PAGES[] = {
   {"Basics", rgb(120, 170, 255),
-   "Twelve small apps on one touch screen. Use the stylus and press firmly.",
+   "Thirteen small apps on one touch screen. Use the stylus and press firmly.",
    "Tap an app to open it.\n"
    "To go home, hold the top-left corner for half a second.\n"
    "Taps land in the wrong place? Go to Settings, Touch calibration."},
@@ -70,6 +70,11 @@ static const Page PAGES[] = {
    "Simple rules make patterns that move and grow.\n"
    "Draw on the screen to add living dots.\n"
    "Pause, change the speed, or start with a Random field."},
+  {"Snake", rgb(120, 230, 110),
+   "The classic game. The snake grows when it eats. Do not hit a wall or its body.",
+   "When it goes sideways, tap above or below its head to turn it.\n"
+   "When it goes up or down, tap left or right of its head.\n"
+   "Gold food is worth 5, but it goes away quickly."},
   {"Settings", rgb(180, 180, 200),
    "Screen brightness, touch calibration and other options.",
    "Tap a row to change it.\n"
@@ -86,12 +91,12 @@ static void listView(uint16_t *fb) {
   appHeader(fb, "Guide", ACCENT);
   tiny(fb, "tap a name", W - 8 - tinyWidth("tap a name"), 8, MUTED);
   for (int i = 0; i < NPAGES; i++) {
-    int x = 6 + (i % 2) * 156, y = 30 + (i / 2) * 35, w = 152, h = 31;
+    int x = 6 + (i % 3) * 104, y = 30 + (i / 3) * 41, w = 100, h = 37;   // 3 x 5: room for 15 pages
     bool pressed = T.down && inBox(T.startX, T.startY, x, y, w, h) && inBox(T.x, T.y, x, y, w, h);
     fillRoundRect(fb, x, y, w, h, 9, pressed ? blend(CARD, PAGES[i].col, 70) : CARD);
     roundRect(fb, x, y, w, h, 9, pressed ? PAGES[i].col : CARD_EDGE);
-    fillCircle(fb, x + 15, y + 15, 4, PAGES[i].col);
-    text(fb, SMALL, PAGES[i].name, x + 28, y + 20, INK);
+    fillCircle(fb, x + 14, y + 18, 4, PAGES[i].col);
+    text(fb, SMALL, PAGES[i].name, x + 25, y + 23, INK);
     if (tapIn(x, y, w, h)) page = i;
   }
 }

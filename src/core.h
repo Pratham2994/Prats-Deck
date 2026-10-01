@@ -27,6 +27,7 @@ static int fps = 0;
 static const int EE_BRICKS_HI = 64;
 static const int EE_LIGHT = 72;
 static const int EE_SYNC = 73;                // 0 = tear-free mode switched off
+static const int EE_SNAKE_HI = 80;            // 2 bytes
 // Chindi uses 256..767 (see app_chindi.h). EEPROM.begin(1024) in setup().
 
 // ---------- Shared look: dark rounded cards, muted labels, one accent colour per app ----------

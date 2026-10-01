@@ -77,7 +77,7 @@ static void shot(const char *name) {
 static void down(int x, int y) { simDown = true; simX = x; simY = y; }
 static void up() { simDown = false; }
 static void tap(int x, int y) { up(); step(6); down(x, y); step(4); up(); step(7); }
-static void tileTap(int i) { tap((i % 4) * 80 + 40, 54 + (i / 4) * 62 + 25); }
+static void tileTap(int i) { tap((i % 5) * 64 + 32, 54 + (i / 5) * 62 + 25); }
 static void goHome() { down(10, 10); step(30); up(); step(8); }
 
 int main() {
@@ -197,7 +197,7 @@ int main() {
   tileTap(7);
   step(10);
   shot("15_guide_list");
-  tap(240, 150);                               // Scope
+  tap(160, 130);                               // Scope
   step(10);
   shot("16_guide_page");
   guide::page = 3;                               // Macros: the page with the most text
@@ -205,7 +205,7 @@ int main() {
   shot("16a_guide_macros");
   goHome();
 
-  tileTap(11);
+  tileTap(12);
   step(10);
   shot("17_settings");
   goHome();
@@ -230,6 +230,45 @@ int main() {
   tileTap(10);
   step(80);
   shot("21_life");
+  goHome();
+
+  tileTap(11);
+  step(20);
+  shot("21a_snake_start");
+  {
+    using namespace snake;
+    const int gw = snake::GW, gh = snake::GH;      // glow.h has a GW and GH too
+    int wait = 0, hold = 0;
+    bool playShot = false;
+    for (int k = 0; k < 4000 && !S.over && S.score < 6; k++) {   // steer to the food with taps beside the head
+      int hx = S.body[S.head] % gw, hy = S.body[S.head] / gw, fx = S.food % gw, fy = S.food / gw;
+      bool turn;
+      if (S.dx != 0) turn = hx == fx || (S.dx > 0 ? fx < hx || hx >= gw - 2 : fx > hx || hx <= 1);
+      else turn = hy == fy || (S.dy > 0 ? fy < hy || hy >= gh - 2 : fy > hy || hy <= 1);
+      if (!S.started) turn = true;
+      if (hold > 0) hold--;                       // the stylus stays down for 3 frames
+      else up();
+      if (!simDown && turn && wait <= 0 && S.ndx == S.dx && S.ndy == S.dy) {
+        int px = OX + hx * CELL + 5, py = OY + hy * CELL + 5;
+        if (S.dx != 0) down(160, (fy != hy ? fy > hy : hy < gh / 2) ? min(py + 30, 236) : max(py - 30, 28));
+        else down((fx != hx ? fx > hx : hx < gw / 2) ? min(px + 30, 316) : max(px - 30, 44), 130);
+        wait = 10;
+        hold = 3;
+      }
+      wait--;
+      step(1);
+      if (S.score >= 3 && !playShot) {
+        shot("21b_snake_play");
+        playShot = true;
+      }
+    }
+    up();
+    printf("snake: score %d (want 6), still alive %d (want 1)\n", S.score, !S.over);
+    int sc = S.score;
+    for (int k = 0; k < 600 && !S.over; k++) step(1);   // no more taps: it runs into a wall
+    shot("21c_snake_over");
+    printf("snake: over %d (want 1), high score %d (want %d)\n", S.over, hi, sc);
+  }
   goHome();
   shot("22_home_end");
   return 0;

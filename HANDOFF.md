@@ -42,7 +42,8 @@ Paste this file into a new Claude Code session to continue the project.
   - `app_chindi.h`: the save data, needs, particles, icons, discoveries, wishes, keyboard walk, home mood and peek.
   - `chindi_play.h`: behaviour (`behave`), touch, room taps (`useSpot`), play modes, UI sheets, gallery, album and the frame function. `jumpOnto` / `jumpOff` move her onto the perch, the table, the bed and the laptop.
   - `chindi_games.h`: the 4 mini-games. It is included inside `namespace chindi`.
-- EEPROM (1024 bytes): calibration at 0, Bricks high score at 64, brightness at 72, tear-free switch at 73, Chindi's save data at 256 (magic "CHN2").
+- EEPROM (1024 bytes): calibration at 0, Bricks high score at 64, brightness at 72, tear-free switch at 73, Snake high score at 80, Chindi's save data at 256 (magic "CHN2").
+- The home page has 5 x 3 tiles (`HOME_COLS`), so 15 apps fit. The Guide list has 3 x 5 names. A new app needs: its header, a line in `APPS`, a page in `app_guide.h`, a row in the README.
 - `pc_monitor.py`: sends PC stats to the Monitor app, one line per second. On Windows it also sends the song that plays (`NP state title<TAB>artist`), read by a small PowerShell helper from the Windows media controls. `pcstats::song()` gives it to the Macros app. Not tested with a real song yet: only with no song, and with made-up lines in the simulator. Finds the Pico by USB vendor ID. Needs `pip install psutil pyserial`.
 
 ## The PC simulator (tools/sim)

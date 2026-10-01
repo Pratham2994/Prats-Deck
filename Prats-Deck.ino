@@ -1,5 +1,5 @@
 // Prats-Deck.ino
-// Prats Deck: 12 touch apps for the Waveshare Pico-ResTouch-LCD-2.8 on a Pico 2 W.
+// Prats Deck: 13 touch apps for the Waveshare Pico-ResTouch-LCD-2.8 on a Pico 2 W.
 //
 //   Chindi     virtual pet cat: feed, pet, play, mini-games, photos
 //   Galaxy     particle galaxy you swirl, drag and flick
@@ -12,6 +12,7 @@
 //   Paint      glow painting with kaleidoscope mirror
 //   Bricks     Breakout with explosions
 //   Life       Conway's Game of Life with glowing trails
+//   Snake      the classic: tap beside the head to turn
 //   Settings   brightness, touch calibration, tear-free screen, Chindi's keyboard walk
 //
 // Go home from any app: hold the top-left corner for half a second.
@@ -39,6 +40,7 @@
 #include "src/app_paint.h"
 #include "src/app_bricks.h"
 #include "src/app_life.h"
+#include "src/app_snake.h"
 #include "src/app_chindi.h"
 #include "src/app_settings.h"
 
@@ -54,6 +56,7 @@ static const App APPS[] = {
   {"Paint", rgb(255, 120, 220), paint::icon, paint::enter, paint::frame, paint::leave},
   {"Bricks", rgb(255, 150, 60), bricks::icon, bricks::enter, bricks::frame, bricks::leave},
   {"Life", rgb(140, 255, 120), life::icon, life::enter, life::frame, life::leave},
+  {"Snake", rgb(120, 230, 110), snake::icon, snake::enter, snake::frame, snake::leave},
   {"Settings", rgb(180, 180, 200), settings::icon, settings::enter, settings::frame, settings::leave},
 };
 static const int NAPPS = sizeof(APPS) / sizeof(APPS[0]);
@@ -72,7 +75,8 @@ static void openApp(int i) {
 
 
 // ---------- Home screen ----------
-static const int TILE_W = 80, TILE_H = 62, TILE_Y = 54, ICON = 46;
+static const int HOME_COLS = 5;                // 5 x 3 tiles: room for 15 apps
+static const int TILE_W = W / HOME_COLS, TILE_H = 62, TILE_Y = 54, ICON = 46;
 
 // Top of the home page: big clock with the date and weather, or the name while there is
 // no internet time. Chindi's mood is on the right.
@@ -127,7 +131,7 @@ static void home(uint16_t *fb, float /*dt*/, uint32_t now) {
   }
 
   for (int i = 0; i < NAPPS; i++) {
-    int x = (i % 4) * TILE_W, y = TILE_Y + (i / 4) * TILE_H;
+    int x = (i % HOME_COLS) * TILE_W, y = TILE_Y + (i / HOME_COLS) * TILE_H;
     int cx = x + TILE_W / 2, cy = y + 2 + ICON / 2;
     uint16_t col = APPS[i].color;
     bool pressed = T.down && T.downMs >= homeSince && inBox(T.startX, T.startY, x, y, TILE_W, TILE_H) &&
