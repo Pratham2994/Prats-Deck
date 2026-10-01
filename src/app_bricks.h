@@ -95,7 +95,7 @@ static void physics(float dt) {
         if (score > hi) {
           hi = score;
           EEPROM.put(EE_BRICKS_HI, hi);
-          EEPROM.commit();
+          flashCommit();
         }
       }
       return;

@@ -129,4 +129,5 @@ The script finds the Pico by itself, on any COM port. On Windows it also sends t
 - `src/fonts/inter.h`: the Inter typeface as smooth fonts (SIL Open Font License, see the licence file there)
 - `tools/fonts/make_fonts.py`: makes `inter.h` from the Inter font files
 - `tools/sim/`: runs the real code on a PC and saves screenshots
+- `tools/hwtest.py`: uses the real deck from the PC (made-up touches over USB) and takes pictures of its screen. It needs a test build: see `HANDOFF.md`
 - `pc_monitor.py`: sends PC stats to the Monitor app

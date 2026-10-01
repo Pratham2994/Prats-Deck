@@ -4,6 +4,14 @@
 #pragma once
 
 #include <EEPROM.h>
+
+// Write the saved data to flash. A test build (-DDECK_TEST) does not: a test must not change
+// the user's saved game, scores or settings.
+static inline void flashCommit() {
+#ifndef DECK_TEST
+  EEPROM.commit();
+#endif
+}
 #include "display.h"
 
 // ---------- Raw reads ----------
@@ -105,7 +113,7 @@ static void calibrate() {
     cal.sy = (220.0f - 20) / (rb[2] - rb[0]);
     cal.oy = 20 - rb[0] * cal.sy;
     EEPROM.put(0, cal);
-    EEPROM.commit();
+    flashCommit();
     return;
   }
 }
@@ -125,7 +133,23 @@ static void getCal() {
   }
 }
 
+#ifdef DECK_TEST
+// A test build takes a made-up touch from the PC (the serial lines "touch" and "drag", see
+// app_pcstats.h). So the PC can use the deck by itself, to test it with nobody at the desk.
+static float injX0 = 0, injY0 = 0, injX1 = 0, injY1 = 0;
+static uint32_t injFrom = 0, injUntil = 0;
+#endif
+
 static bool touchXY(int &x, int &y) {
+#ifdef DECK_TEST
+  uint32_t t = millis();
+  if ((int32_t)(injUntil - t) > 0) {
+    float k = (float)(t - injFrom) / (injUntil - injFrom);
+    x = (int)(injX0 + (injX1 - injX0) * k);
+    y = (int)(injY0 + (injY1 - injY0) * k);
+    return true;
+  }
+#endif
   int a, b;
   if (!touchRaw(a, b)) return false;
   if (cal.swap) {

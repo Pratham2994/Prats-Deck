@@ -51,7 +51,7 @@ static void saveBest() {
   if (score <= best) return;
   best = score;
   EEPROM.put(EE_2048_HI, best);
-  EEPROM.commit();
+  flashCommit();
 }
 
 static void enter() {

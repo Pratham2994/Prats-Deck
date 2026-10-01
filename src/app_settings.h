@@ -48,7 +48,7 @@ static void frame(uint16_t *fb, float, uint32_t now) {
     lightIdx = (lightIdx + 1) % 4;
     setBacklight(LIGHTS[lightIdx]);
     EEPROM.write(EE_LIGHT, lightIdx);
-    EEPROM.commit();
+    flashCommit();
   }
   snprintf(s, sizeof(s), "%d%%", LIGHTS[lightIdx]);
   pill(fb, W - 18, 39, s, rgb(255, 230, 120));
@@ -68,7 +68,7 @@ static void frame(uint16_t *fb, float, uint32_t now) {
   if (row(fb, 108, "Tear-free screen", s, sc) && syncFound) {
     lcdSetSync(!lcdSync);
     EEPROM.write(EE_SYNC, lcdSync ? 1 : 0);
-    EEPROM.commit();
+    flashCommit();
   }
   if (syncFound) toggle(fb, W - 54, 115, lcdSync, sc);
 

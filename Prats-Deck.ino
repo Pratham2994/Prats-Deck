@@ -82,6 +82,7 @@ static uint32_t homeSince = 0;                 // taps on home count only for pr
 static void openApp(int i) {
   if (cur >= 0) APPS[cur].leave();
   cur = i;
+  shownApp = i;
   glowClear();
   sparksClear();
   if (cur >= 0) APPS[cur].enter();

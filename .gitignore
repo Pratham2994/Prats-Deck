@@ -6,3 +6,6 @@ build/
 tools/sim/out/
 *.exe
 *.uf2
+
+# pictures from the real deck (tools/hwtest.py)
+tools/hwtest_out/

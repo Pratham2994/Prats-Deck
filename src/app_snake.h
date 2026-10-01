@@ -72,7 +72,7 @@ static void gameOver() {
   if (S.score > hi) {
     hi = S.score;
     EEPROM.put(EE_SNAKE_HI, (uint16_t)hi);
-    EEPROM.commit();
+    flashCommit();
   }
 }
 

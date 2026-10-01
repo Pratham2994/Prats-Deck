@@ -79,7 +79,7 @@ static void defaults() {
 
 static void saveNow() {
   EEPROM.put(EE_PET, P);
-  EEPROM.commit();
+  flashCommit();
   dirty = false;
   lastSave = millis();
 }

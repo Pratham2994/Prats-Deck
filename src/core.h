@@ -22,6 +22,7 @@ alignas(8) static uint8_t appMem[10240];
   static Type &name = *reinterpret_cast<Type *>(appMem);
 
 static int fps = 0;
+static int shownApp = -1;                     // the app on the screen (its place in APPS), -1 = the home page
 
 // flash memory layout (calibration is at 0)
 static const int EE_BRICKS_HI = 64;

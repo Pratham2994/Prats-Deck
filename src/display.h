@@ -33,6 +33,7 @@ static const uint32_t TP_HZ = 2000000;
 static uint16_t frame[2][W * H];
 static int dmaCh;
 static bool sending = false;
+static const uint16_t *shownFrame = frame[0];  // the complete picture that was given to the screen last
 
 // ---------- Frame timing, for development ----------
 // Build with -DDECK_PROF=<app number> (-1 = home page). The deck then opens that app at
@@ -291,10 +292,12 @@ static void lcdSetSync(bool on) {
 static uint16_t *lcdPresent(uint16_t *fb) {
   if (!lcdSync) {
     lcdStart(fb);
+    shownFrame = fb;
     return fb == frame[0] ? frame[1] : frame[0];
   }
   lcdWait();
   if (fb != frame[0]) memcpy(frame[0], fb, sizeof(frame[0]));
+  shownFrame = frame[0];
   lcdTurn(frame[0], frame[1]);
   lcdSyncWait();
   lcdStart(frame[1], H, W);

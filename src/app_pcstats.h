@@ -14,9 +14,14 @@ namespace pcstats {
 // and, when the song changes and every few seconds:
 // "NP state title<TAB>artist\n"   state: 0 = nothing, 1 = playing, 2 = paused
 // A line with only "?" asks the deck how it is. It answers
-// "DECK fps=.. heap=.. up=.. tearfree=.. screen_answers=..": frames a second now, free memory
-// in bytes, seconds since start-up, tear-free mode on (1) or off, and if the screen answered
-// the start-up test that the tear-free mode needs.
+// "DECK app=.. fps=.. heap=.. up=.. tearfree=.. screen_answers=..": the app on the screen
+// (-1 = home), frames a second now, free memory in bytes, seconds since start-up, tear-free
+// mode on (1) or off, and if the screen answered the start-up test that the tear-free mode needs.
+// A test build (-DDECK_TEST) also takes a made-up touch, so that the PC can use the deck:
+// "touch x y ms" holds the stylus at x, y for ms milliseconds,
+// "drag x0 y0 x1 y1 ms" moves it from x0, y0 to x1, y1 in ms milliseconds,
+// "shot" sends the picture on the screen: the line "SHOT 320 240", then 153600 bytes
+// (each pixel as RGB565, low byte first).
 enum { F_CPU_P, F_RAM, F_GPU, F_CPUT, F_GPUT, F_DOWN, F_UP, F_RAMU, F_RAMT, NF };
 static const int HISTN = 150;
 
@@ -61,10 +66,30 @@ static int song(uint32_t now) {
 
 static void parse(char *s) {
   if (strcmp(s, "?") == 0) {
-    Serial.printf("DECK fps=%d heap=%d up=%lu tearfree=%d screen_answers=%d\n", fps, (int)rp2040.getFreeHeap(),
+    Serial.printf("DECK app=%d fps=%d heap=%d up=%lu tearfree=%d screen_answers=%d\n", shownApp, fps, (int)rp2040.getFreeHeap(),
                   (unsigned long)(millis() / 1000), lcdSync, syncFound);
     return;
   }
+#ifdef DECK_TEST
+  if (strncmp(s, "touch ", 6) == 0 || strncmp(s, "drag ", 5) == 0) {
+    int v[5] = {0, 0, 0, 0, 0}, n = 0;
+    for (char *p = strchr(s, ' '); p && n < 5; p = strchr(p + 1, ' ')) v[n++] = atoi(p + 1);
+    bool drag = s[0] == 'd';
+    injX0 = v[0];
+    injY0 = v[1];
+    injX1 = drag ? v[2] : v[0];
+    injY1 = drag ? v[3] : v[1];
+    injFrom = millis();
+    injUntil = injFrom + max(drag ? v[4] : v[2], 1);
+    return;
+  }
+  if (strcmp(s, "shot") == 0) {
+    Serial.printf("SHOT %d %d\n", W, H);
+    Serial.write((const uint8_t *)shownFrame, sizeof(frame[0]));
+    Serial.flush();
+    return;
+  }
+#endif
   if (strncmp(s, "NP ", 3) == 0) { parseSong(s + 3); return; }
   if (strncmp(s, "PC ", 3) != 0) return;
   char *p = s + 3;
