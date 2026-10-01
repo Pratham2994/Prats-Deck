@@ -4,9 +4,11 @@
 //                 (cats are scared of them). Missing a fish or catching a cucumber costs a life.
 //   Mouse Whack : tap the mice before they hide. 30 seconds. Golden mouse = 3.
 //   Laser Chase : keep the laser dot away from Chindi. She gets faster.
+//   Zoomies     : she runs through the garden by herself. Tap to jump over the cucumbers and
+//                 the puddles. Fish on the way give points. 3 lives.
 #pragma once
 
-enum Game : uint8_t { G_FISH, G_MOUSE, G_LASER };
+enum Game : uint8_t { G_FISH, G_MOUSE, G_LASER, G_RUN };
 static uint8_t game = G_FISH;
 static float gT = 0;
 static int gScore = 0, gLives = 3, gReward = 0;
@@ -14,7 +16,7 @@ static bool gOver = false, gBest = false;
 
 struct Fall {
   float x, y, vy, rot;
-  uint8_t kind;          // 0 fish, 1 golden fish, 2 cucumber
+  uint8_t kind;          // 0 fish, 1 golden fish, 2 cucumber, 3 puddle (Zoomies only)
   bool on;
 };
 static Fall falls[10];
@@ -29,6 +31,10 @@ static float pawT = -1, pawX = 0, pawY = 0;
 
 static float gDotX = 260, gDotY = 170, gSpeed = 70;
 static Cat gCat;
+
+static const int RUN_X = 72, RUN_FLOOR = 206;     // Zoomies: where she runs
+static float runDist = 0, runV = 0;               // how far she has run (px), and her speed now
+static int runPts = 0;                            // points from fish
 
 static void startGame(uint8_t g) {
   mode = MD_GAME;
@@ -50,6 +56,9 @@ static void startGame(uint8_t g) {
   gSpeed = 70;
   gCat = Cat();
   gCat.x = 60;
+  runDist = 0;
+  runPts = 0;
+  if (g == G_RUN) spawnIn = 1.4f;
   for (auto &p : parts) p.life = 0;
   toFloor();
   touchDay();
@@ -58,12 +67,12 @@ static void startGame(uint8_t g) {
 static void endGame() {
   gOver = true;
   P.games++;
-  uint16_t *hi = game == G_FISH ? &P.hiFish : game == G_MOUSE ? &P.hiMouse : &P.hiLaser;
+  uint16_t *hi = game == G_FISH ? &P.hiFish : game == G_MOUSE ? &P.hiMouse : game == G_RUN ? &P.hiRun : &P.hiLaser;
   if (gScore > *hi) {
     *hi = gScore;
     gBest = true;
   }
-  int pts = game == G_LASER ? gScore / 10 : gScore;           // laser: seconds
+  int pts = game == G_LASER ? gScore / 10 : game == G_RUN ? gScore / 8 : gScore;   // laser: seconds. Zoomies: metres
   gReward = min(5, game == G_LASER ? pts / 8 : pts / 12);     // treats stay special
   P.treats += gReward;
   bump(P.fun, fminf(30, 8 + pts));
@@ -119,7 +128,7 @@ static void gameBar(uint16_t *fb, const char *title) {
   if (game == G_LASER) snprintf(s, sizeof(s), "%d.%d s", gScore / 10, gScore % 10);
   else snprintf(s, sizeof(s), "%d", gScore);
   textRight(fb, MEDIUM, s, W - 40, 19, ACCENT);
-  if (game == G_FISH)
+  if (game == G_FISH || game == G_RUN)
     for (int i = 0; i < 3; i++) icon(fb, IC_HEART, 170 + i * 16, 12, i < gLives ? rgb(255, 80, 110) : rgb(60, 60, 70));
   if (game == G_MOUSE) {
     float left = fmaxf(0, 30 - gT);
@@ -346,10 +355,130 @@ static void laserGame(uint16_t *fb, float dt) {
   else if (gT < 2.5f) textCenter(fb, SMALL, "Keep the dot away from her!", W / 2, 60, WHITE);
 }
 
+// ---- Zoomies ----
+static void runSpawn(uint8_t kind, float x, float y) {
+  for (auto &f : falls)
+    if (!f.on) {
+      f = {x, y, 0, 0, kind, true};
+      return;
+    }
+}
+
+static void runGame(uint16_t *fb, float dt) {
+  runV = fminf(330, 130 + gT * 5);
+  if (!gOver) {
+    gT += dt;
+    runDist += runV * dt;
+    gCat.phase += dt * runV * 0.07f;
+    gScore = (int)(runDist / 25) + runPts;
+    // a tap anywhere under the top bar makes her jump
+    if (T.pressed && T.y > 28 && gCat.hop <= 0) gCat.hopV = 330;
+    if (gCat.hop > 0 || gCat.hopV != 0) {
+      gCat.hopV -= 900 * dt;
+      gCat.hop += gCat.hopV * dt;
+      if (gCat.hop <= 0) { gCat.hop = 0; gCat.hopV = 0; }
+    }
+    // the next thing in her way. Now and then a fish comes with it: over it, or on the grass after it
+    spawnIn -= dt;
+    if (spawnIn <= 0) {
+      spawnIn = frand(1.25f, 2.0f) - fminf(0.3f, gT * 0.006f);
+      bool puddle = random(0, 100) < 30;
+      runSpawn(puddle ? 3 : 2, W + 30, RUN_FLOOR - (puddle ? 2 : 7));
+      int r = random(0, 100);
+      uint8_t fish = random(0, 100) < 15 ? 1 : 0;
+      if (r < 30) runSpawn(fish, W + 30, RUN_FLOOR - 74);
+      else if (r < 55) runSpawn(fish, W + 30 + runV * 0.62f, RUN_FLOOR - 26);
+    }
+  }
+  scare = fmaxf(0, scare - dt);
+
+  // the garden: sky, hedge, fence and grass. The things far away slide slower.
+  room::vgrad(fb, 0, 0, W, 150, rgb(126, 196, 250), rgb(206, 234, 250));
+  fillCircle(fb, 262, 50, 15, rgb(255, 238, 160));
+  fillRect(fb, 0, 150, W, RUN_FLOOR - 160, rgb(96, 168, 96));
+  for (int x = -(int)fmodf(runDist * 0.2f, 120) - 60; x < W + 50; x += 120) {
+    fillCircle(fb, x, 150, 34, rgb(96, 168, 96));
+    fillCircle(fb, x + 60, 152, 42, rgb(84, 154, 88));
+  }
+  const uint16_t wood = rgb(250, 246, 236), woodEdge = rgb(214, 204, 188);
+  fillRect(fb, 0, 166, W, 5, wood);
+  fillRect(fb, 0, 184, W, 5, wood);
+  for (int x = -(int)fmodf(runDist * 0.5f, 34); x < W; x += 34) {
+    fillRect(fb, x, 156, 8, RUN_FLOOR - 166, wood);
+    vline(fb, x + 8, 158, RUN_FLOOR - 168, woodEdge);
+    fillTriangle(fb, x, 156, x + 7, 156, x + 4, 150, wood);
+  }
+  room::vgrad(fb, 0, RUN_FLOOR - 10, W, H - RUN_FLOOR + 10, rgb(128, 206, 112), rgb(84, 160, 84));
+  for (int x = -(int)fmodf(runDist, 56); x < W; x += 56) {
+    fillRect(fb, x, RUN_FLOOR + 8, 12, 2, rgb(92, 172, 90));
+    fillRect(fb, x + 30, RUN_FLOOR + 22, 14, 2, rgb(76, 150, 78));
+  }
+
+  // what is in her way, and the fish
+  const float headX = RUN_X + 12, headY = RUN_FLOOR - gCat.hop - 28;
+  cg::begin();
+  cg::X.set(0, 0, 1, false);
+  int sh = cg::ell(RUN_X, RUN_FLOOR + 1, 30 - gCat.hop * 0.15f, 4, 0, BLACK);
+  cg::alpha(sh, 50);
+  for (auto &f : falls) {
+    if (!f.on) continue;
+    if (!gOver) f.x -= runV * dt;
+    if (f.x < -30) { f.on = false; continue; }
+    if (f.kind >= 2) {
+      if (!gOver && scare <= 0 && fabsf(f.x - RUN_X) < 20 && gCat.hop < 10) {
+        f.on = false;
+        gLives--;
+        scare = 1;
+        burst(f.kind == 3 ? PK_DROP : PK_SPARK, f.x, RUN_FLOOR - 8, 12, 120, 0.6f, f.kind == 3 ? rgb(150, 200, 255) : rgb(120, 220, 120));
+        continue;
+      }
+      if (f.kind == 3) {
+        cg::X.set(f.x, f.y, 1, false);
+        int p = cg::ell(0, 0, 22, 4.5f, 0, rgb(110, 170, 240));
+        cg::out(p, rgb(60, 110, 190), 1);
+        cg::ell(-6, -1, 8, 1.2f, 0, rgb(210, 232, 255));
+      } else {
+        fishShape(f.x, f.y, 0, 2);
+      }
+    } else {
+      if (!gOver && dist(f.x, f.y, headX, headY) < 26) {
+        f.on = false;
+        runPts += f.kind == 1 ? 15 : 5;
+        burst(PK_SPARK, f.x, f.y, f.kind == 1 ? 18 : 8, 120, 0.6f, f.kind == 1 ? rgb(255, 220, 80) : WHITE);
+        continue;
+      }
+      fishShape(f.x, f.y + sinf(worldT * 5 + f.x * 0.05f) * 3, 0, f.kind);
+    }
+  }
+  cg::render(fb);
+  if (!gOver && gLives <= 0) endGame();
+
+  Look L;
+  L.x = RUN_X;
+  L.y = RUN_FLOOR - gCat.hop;
+  L.s = 0.6f;
+  L.t = worldT;
+  L.pose = gOver ? SIT : (gCat.hop > 0 ? POUNCE : RUN);
+  L.stretch = gCat.hop > 0 ? 1 : 0;
+  L.phase = gCat.phase;
+  L.pupil = scare > 0 ? 1 : 0.5f;
+  L.earBack = scare > 0 ? 1 : 0;
+  L.tailPuff = scare > 0 ? 1 : 0;
+  L.acc = P.acc;
+  L.happy = gOver;
+  kitty::draw(fb, L);
+  updateParts(dt);
+  drawParts(fb);
+  gameBar(fb, "Zoomies");
+  if (gOver) gameOverCard(fb);
+  else if (gT < 2.5f) textCenter(fb, SMALL, "Tap to jump. Mind the cucumbers!", W / 2, 60, rgb(40, 70, 110));
+}
+
 static void gameFrame(uint16_t *fb, float dt, uint32_t) {
   switch (game) {
     case G_FISH: fishGame(fb, dt); break;
     case G_MOUSE: mouseGame(fb, dt); break;
+    case G_RUN: runGame(fb, dt); break;
     default: laserGame(fb, dt);
   }
 }

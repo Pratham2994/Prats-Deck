@@ -1517,7 +1517,7 @@ static void sheets(uint16_t *fb) {
         else strlcpy(sub, k == 0 ? "she pounces" : k == 1 ? "swing it" : "throw it", sizeof(sub));
         set(k, TOY_NAMES[k], sub, k == 0 ? IC_LASER : k == 1 ? IC_FEATHER : IC_YARN, rgb(255, 110, 170), lv < TOY_LV[k]);
       }
-      set(3, "Games", "3 mini-games", IC_PAD, rgb(120, 220, 140));
+      set(3, "Games", "4 mini-games", IC_PAD, rgb(120, 220, 140));
       int h = tiles(fb, "Play", t, 4, 2);
       if (h == 3) { sheet = SH_GAMES; sheetAnim = 0.6f; }
       else if (h >= 0 && lv >= TOY_LV[h]) {
@@ -1558,7 +1558,9 @@ static void sheets(uint16_t *fb) {
       set(1, "Mouse Whack", sub, IC_MOUSE, rgb(200, 200, 210));
       snprintf(sub, sizeof(sub), "best %d.%d s", P.hiLaser / 10, P.hiLaser % 10);
       set(2, "Laser Chase", sub, IC_LASER, rgb(255, 90, 90));
-      int h = tiles(fb, "Mini-games", t, 3, 1);
+      snprintf(sub, sizeof(sub), "best %d", P.hiRun);
+      set(3, "Zoomies", sub, IC_BOLT, rgb(250, 210, 70));
+      int h = tiles(fb, "Mini-games", t, 4, 2);
       if (h >= 0) { sheet = SH_NONE; startGame(h); }
       break;
     }

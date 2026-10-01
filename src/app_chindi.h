@@ -48,7 +48,8 @@ struct Save {
   uint32_t xp;
   uint16_t treats, streak;
   int32_t lastDay;
-  uint8_t acc, room, kbWalk, nPhotos, tutorial, wishDone, wish[3], pad[3];
+  uint8_t acc, room, kbWalk, nPhotos, tutorial, wishDone, wish[3], pad;
+  uint16_t hiRun;                                         // was 2 unused bytes, always 0: old saves still load
   uint16_t hiFish, hiMouse, hiLaser, gifts;               // gifts: one bit per gift collected
   uint32_t pets, meals, games, found;                     // found: one bit per discovery
   int32_t wishDay;                                        // the day these wishes are for

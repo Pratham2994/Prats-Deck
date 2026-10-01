@@ -67,7 +67,7 @@ A tap on the open floor calls her over.
 - **Gifts:** when all 3 wishes are done, and sometimes on her own, she brings you a small thing. Tap it to keep it. There are 12 to collect.
 - **Album:** it shows your gifts and the 20 things you can find her doing. Open it from the stats bar or from More.
 - **Levels:** bond levels 1 to 10 unlock rooms, toys and things to wear. Daily streaks give treats.
-- **Mini-games:** Fish Catch, Mouse Whack, Laser Chase.
+- **Mini-games:** Fish Catch, Mouse Whack, Laser Chase and Zoomies (she runs through the garden; tap to jump over the cucumbers and puddles).
 
 **On her own** she wanders, grooms, kneads, loafs, flops on her side, stares at nothing, gets the zoomies, pushes the cup off the table, sits in boxes, naps in the sunbeam and sleeps at night. The window shows the real weather and time (from the Clock app). When `pc_monitor.py` reports a busy CPU, she lies on the warm laptop.
 

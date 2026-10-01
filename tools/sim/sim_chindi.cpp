@@ -327,6 +327,11 @@ int main() {
   step(5);
 
   // ---- mini-games ----
+  sheet = SH_GAMES;
+  step(12);
+  shot("c30a_games_sheet");
+  sheet = SH_NONE;
+  step(3);
   startGame(G_FISH);
   down(160, 200);
   for (int k = 0; k < 200; k++) { simX = 160 + (int)(120 * sinf(k * 0.05f)); step(1); }
@@ -345,6 +350,23 @@ int main() {
   }
   shot("c33_mouse_whack");
   fails += check(gScore > 0, "tapping mice scores");
+  startGame(G_RUN);
+  bool jumpShot = false;
+  for (int k = 0; k < 700 && !gOver; k++) {       // jump when a cucumber or a puddle is close
+    bool jump = false;
+    for (auto &f : falls)
+      if (f.on && f.kind >= 2 && f.x - RUN_X > runV * 0.22f && f.x - RUN_X < runV * 0.40f) jump = true;
+    if (jump && gCat.hop <= 0) down(160, 150);
+    else up();
+    step(1);
+    if (k == 262) shot("c34_zoomies");
+    if (gCat.hop > 45 && !jumpShot) { shot("c34a_zoomies_jump"); jumpShot = true; }
+  }
+  up();
+  fails += check(gScore > 20 && gLives == 3, "Zoomies: a jump in time clears the cucumbers and puddles");
+  for (int k = 0; k < 2500 && !gOver; k++) step(1);   // no more jumps: she runs into things
+  shot("c35_zoomies_over");
+  fails += check(gOver && P.hiRun > 0, "Zoomies ends and keeps the best score");
   mode = MD_NORMAL;
   step(5);
 

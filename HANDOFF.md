@@ -41,7 +41,7 @@ Paste this file into a new Claude Code session to continue the project.
   - `chindi_room.h`: the rooms (living, dining, bedroom, balcony), their tappable spots (`DEFS`, `spotAt`), the sky and weather, the props, the gifts.
   - `app_chindi.h`: the save data, needs, particles, icons, discoveries, wishes, keyboard walk, home mood and peek.
   - `chindi_play.h`: behaviour (`behave`), touch, room taps (`useSpot`), play modes, UI sheets, gallery, album and the frame function. `jumpOnto` / `jumpOff` move her onto the perch, the table, the bed and the laptop.
-  - `chindi_games.h`: the 3 mini-games. It is included inside `namespace chindi`.
+  - `chindi_games.h`: the 4 mini-games. It is included inside `namespace chindi`.
 - EEPROM (1024 bytes): calibration at 0, Bricks high score at 64, brightness at 72, tear-free switch at 73, Chindi's save data at 256 (magic "CHN2").
 - `pc_monitor.py`: sends PC stats to the Monitor app, one line per second. Finds the Pico by USB vendor ID. Needs `pip install psutil pyserial`.
 
