@@ -4,14 +4,19 @@
 //   Needs     : hunger, energy, fun, clean, love. They change only while the Pico is on.
 //   Touch     : stroke her head, chin or back; boop the nose; tap her eyes to slow-blink;
 //               belly rubs are a gamble; do not pull her tail.
+//   Rooms     : the room is the menu. Tap the fountain, the cat tree, the corner brush, the
+//               window, the flowers, the photo frames, the light switch, the bed, the door,
+//               the plants. She goes there and uses them.
 //   Play      : laser pointer, feather wand, yarn ball, and three mini-games.
-//   Life      : she wanders, grooms, kneads, loafs, stares at nothing, gets the zoomies,
-//               pushes the cup off the table, sits in boxes, naps in the sunbeam, watches
-//               the rain, lies on the warm laptop when your PC is busy, sleeps at night.
-//   Links     : real weather and time in the window, the Monitor app warms the laptop,
-//               she peeks in on the home screen, and (if on)
-//               she sometimes walks on your keyboard and types on your PC.
-//   Progress  : bond levels unlock accessories, toys and rooms. Daily streaks, photos.
+//   Life      : she wanders, grooms, kneads, loafs, flops on her side, stares at nothing,
+//               gets the zoomies, pushes the cup off the table, sits in boxes, naps in the
+//               sunbeam, watches the birds, lies on the warm laptop when your PC is busy.
+//   Game      : three wishes a day earn treats. She brings you gifts to collect. Each new
+//               thing you find her doing goes in the album. Bond levels unlock rooms, toys
+//               and accessories.
+//   Links     : real weather and time in the window, the Monitor app warms the laptop, her
+//               mood shows on the home screen, and (if on) she sometimes walks on your
+//               keyboard and types on your PC.
 #pragma once
 
 #include <Keyboard.h>
@@ -28,11 +33,11 @@ using kitty::Look;
 
 // ---------- Saved state ----------
 static const int EE_PET = 256;
-static const uint32_t MAGIC = 0x43484E31;    // "CHN1"
+static const uint32_t MAGIC = 0x43484E32;    // "CHN2"
 static const int NPHOTO = 12;
 
 struct Photo {
-  uint8_t room, pose, mouth, acc, flags, wx, eye, pad;   // flags: 1 flip, 2 happy, 4 in box, 8 glasses
+  uint8_t room, pose, mouth, acc, flags, wx, eye, base;   // flags: 1 flip, 2 happy, 4 in box, 8 glasses. base: feet y
   int16_t x, hourQ;                                       // hour * 10
   int32_t day;                                            // days since 1970, or -1
 };
@@ -43,9 +48,10 @@ struct Save {
   uint32_t xp;
   uint16_t treats, streak;
   int32_t lastDay;
-  uint8_t acc, room, kbWalk, nPhotos, tutorial, pad[3];
-  uint16_t hiFish, hiMouse, hiLaser, pad2;
-  uint32_t pets, meals, games;
+  uint8_t acc, room, kbWalk, nPhotos, tutorial, wishDone, wish[3], pad[3];
+  uint16_t hiFish, hiMouse, hiLaser, gifts;               // gifts: one bit per gift collected
+  uint32_t pets, meals, games, found;                     // found: one bit per discovery
+  int32_t wishDay;                                        // the day these wishes are for
   Photo photos[NPHOTO];
 };
 static_assert(EE_PET + sizeof(Save) <= 1024, "Chindi's save data must fit in the 1 KB flash area");
@@ -64,6 +70,8 @@ static void defaults() {
   P.treats = 3;
   P.kbWalk = 1;
   P.lastDay = -1;
+  P.wishDay = -9;
+  P.wishDone = 3;
 }
 
 static void saveNow() {
@@ -71,6 +79,40 @@ static void saveNow() {
   EEPROM.commit();
   dirty = false;
   lastSave = millis();
+}
+
+static void bump(float &v, float d) {
+  v = constrain(v + d, 0.0f, 100.0f);
+  dirty = true;
+}
+
+// ---------- Levels and unlocks ----------
+static const uint32_t LV[10] = {0, 60, 150, 280, 450, 660, 920, 1230, 1600, 2050};
+static const uint8_t ACC_LV[kitty::NACC] = {1, 2, 4, 6, 8, 10};
+static const char *const ACC_NAMES[kitty::NACC] = {"None", "Bandana", "Bow", "Bell collar", "Party hat", "Crown"};
+static const uint8_t TOY_LV[3] = {1, 2, 4};
+static const char *const TOY_NAMES[3] = {"Laser", "Feather", "Yarn"};
+static const uint8_t ROOM_LV[room::NROOM] = {1, 3, 5, 7};
+
+static int level() {
+  int l = 1;
+  while (l < 10 && P.xp >= LV[l]) l++;
+  return l;
+}
+
+static const char *unlockText(int lv) {
+  switch (lv) {
+    case 2: return "Feather wand and bandana";
+    case 3: return "Dining room";
+    case 4: return "Yarn ball and bow";
+    case 5: return "Bedroom";
+    case 6: return "Bell collar";
+    case 7: return "Balcony";
+    case 8: return "Party hat";
+    case 9: return "One more level to the crown";
+    case 10: return "Crown!";
+    default: return "";
+  }
 }
 
 static void load() {
@@ -85,44 +127,11 @@ static void load() {
   if (P.acc >= kitty::NACC) P.acc = 0;
   if (P.room >= room::NROOM) P.room = 0;
   if (P.nPhotos > NPHOTO) P.nPhotos = 0;
-}
-
-static void bump(float &v, float d) {
-  v = constrain(v + d, 0.0f, 100.0f);
-  dirty = true;
-}
-
-// ---------- Levels and unlocks ----------
-static const uint32_t LV[10] = {0, 60, 150, 280, 450, 660, 920, 1230, 1600, 2050};
-static const uint8_t ACC_LV[kitty::NACC] = {1, 2, 5, 7, 9, 10};
-static const char *const ACC_NAMES[kitty::NACC] = {"None", "Bandana", "Bow", "Bell collar", "Party hat", "Crown"};
-static const uint8_t TOY_LV[3] = {1, 3, 4};
-static const char *const TOY_NAMES[3] = {"Laser", "Feather", "Yarn"};
-static const uint8_t ROOM_LV[room::NROOM] = {1, 6, 8};
-
-static int level() {
-  int l = 1;
-  while (l < 10 && P.xp >= LV[l]) l++;
-  return l;
-}
-
-static const char *unlockText(int lv) {
-  switch (lv) {
-    case 2: return "Bandana unlocked";
-    case 3: return "Feather wand unlocked";
-    case 4: return "Yarn ball unlocked";
-    case 5: return "Bow unlocked";
-    case 6: return "Study room unlocked";
-    case 7: return "Bell collar unlocked";
-    case 8: return "Balcony unlocked";
-    case 9: return "Party hat unlocked";
-    case 10: return "Crown unlocked!";
-    default: return "";
-  }
+  if (P.wishDone > 3) P.wishDone = 3;
 }
 
 // ---------- Particles ----------
-enum PK : uint8_t { PK_HEART, PK_SPARK, PK_Z, PK_CRUMB, PK_CONFETTI, PK_FUR, PK_SHARD, PK_DUST, PK_DROP };
+enum PK : uint8_t { PK_HEART, PK_SPARK, PK_Z, PK_CRUMB, PK_CONFETTI, PK_FUR, PK_SHARD, PK_DUST, PK_DROP, PK_RING, PK_PETAL };
 struct Part {
   float x, y, vx, vy, life, max, size;
   uint16_t col;
@@ -165,7 +174,9 @@ static void updateParts(float dt) {
       case PK_SHARD: g = 520; break;
       case PK_DROP: g = 300; break;
       case PK_FUR: g = 25; p.vx += sinf(p.life * 6) * 20 * dt; break;
+      case PK_PETAL: g = 40; p.vx = sinf(p.life * 4 + p.size) * 26; break;
       case PK_HEART: case PK_Z: p.vx = sinf(p.life * 3 + p.size) * 12; break;
+      case PK_RING: break;
       default: p.vx *= powf(0.2f, dt); p.vy *= powf(0.2f, dt);
     }
     p.vy += g * dt;
@@ -204,7 +215,7 @@ static void drawParts(uint16_t *fb) {
       case PK_HEART: heartShape(p.x, p.y, p.size / 9, p.col, a); break;
       case PK_Z: {
         char z[2] = {k > 0.5f ? 'Z' : 'z', 0};
-        tiny(fb, z, x, y, blend(rgb(60, 70, 120), p.col, a), p.size > 3 ? 2 : 1);
+        text(fb, p.size > 3 ? SMALL : TINY, z, x, y, blend(rgb(60, 70, 120), p.col, a));
         break;
       }
       case PK_SPARK:
@@ -215,15 +226,29 @@ static void drawParts(uint16_t *fb) {
         break;
       case PK_CONFETTI: fillRect(fb, x, y, (int)p.size, (int)(p.size * (0.5f + 0.5f * fabsf(sinf(p.life * 9)))) + 1, p.col); break;
       case PK_SHARD: fillTriangle(fb, x, y, x + 3, y + 1, x + 1, y + 4, p.col); break;
-      case PK_FUR: fillCircle(fb, x, y, 1, blend(fb[constrain(y, 0, H - 1) * W + constrain(x, 0, W - 1)], p.col, a)); break;
+      case PK_FUR: pixelA(fb, x, y, p.col, a / 255.0f); pixelA(fb, x + 1, y, p.col, a / 400.0f); break;
       case PK_DUST:
         for (int j = -2; j <= 2; j++)
           for (int i = -2; i <= 2; i++)
             if (i * i + j * j <= 4) dotA(fb, x + i, y + j, p.col, a / 3);
         break;
+      case PK_RING: {                          // a ripple where you tapped
+        float r = (1 - k) * p.size;
+        for (int s = 0; s < 20; s++) {
+          float an = s * 0.31416f;
+          pixelA(fb, x + (int)(cosf(an) * r), y + (int)(sinf(an) * r * 0.55f), p.col, k);
+        }
+        break;
+      }
+      case PK_PETAL: {
+        int e = cg::ell(p.x, p.y, 3.2f, 1.8f, p.life * 3, p.col);
+        cg::alpha(e, a);
+        break;
+      }
       default: fillRect(fb, x, y, 2, 2, p.col);
     }
   }
+  cg::X.set(0, 0, 1, false);
   cg::render(fb);
 }
 
@@ -231,12 +256,12 @@ static void drawParts(uint16_t *fb) {
 enum Icon : uint8_t {
   IC_NONE, IC_HEART, IC_FISH, IC_ZZZ, IC_BALL, IC_EXCL, IC_Q, IC_SPARK, IC_BOWL, IC_YARN, IC_BRUSH, IC_MOON,
   IC_DOTS, IC_TREAT, IC_LASER, IC_FEATHER, IC_PAD, IC_HANGER, IC_HOUSE, IC_CAMERA, IC_PHOTOS, IC_GEAR,
-  IC_MOUSE, IC_BOLT, IC_LOCK, IC_X, IC_STAR, IC_KEYS
+  IC_MOUSE, IC_BOLT, IC_LOCK, IC_X, IC_STAR, IC_KEYS, IC_GIFT, IC_DROP, IC_BIRD
 };
 static char bubbleText[28] = "";
 static uint8_t bubbleIcon = IC_NONE;
 static uint32_t bubbleUntil = 0;
-static char toastText[44] = "";
+static char toastText[52] = "";
 static uint16_t toastCol = WHITE;
 static uint32_t toastUntil = 0;
 
@@ -266,7 +291,7 @@ static void icon(uint16_t *fb, uint8_t ic, int cx, int cy, uint16_t c) {
       fillTriangle(fb, cx + 2, cy, cx + 8, cy - 5, cx + 8, cy + 5, c);
       pixel(fb, cx - 4, cy - 1, BLACK);
       break;
-    case IC_ZZZ: tiny(fb, "z", cx - 6, cy - 2, c); tiny(fb, "Z", cx - 1, cy - 7, c); break;
+    case IC_ZZZ: text(fb, TINY, "z", cx - 6, cy + 5, c); text(fb, TINY, "Z", cx, cy + 1, c); break;
     case IC_BALL:
     case IC_YARN:
       fillCircle(fb, cx, cy, 6, c);
@@ -274,8 +299,8 @@ static void icon(uint16_t *fb, uint8_t ic, int cx, int cy, uint16_t c) {
       line(fb, cx - 4, cy + 3, cx + 3, cy - 5, dim(c));
       if (ic == IC_YARN) line(fb, cx + 5, cy + 3, cx + 9, cy + 7, c);
       break;
-    case IC_EXCL: fillRect(fb, cx - 1, cy - 7, 3, 9, c); fillRect(fb, cx - 1, cy + 4, 3, 3, c); break;
-    case IC_Q: tiny(fb, "?", cx - 2, cy - 4, c, 1); break;
+    case IC_EXCL: fillRoundRect(fb, cx - 1, cy - 7, 3, 9, 1, c); fillCircle(fb, cx, cy + 5, 1, c); break;
+    case IC_Q: text(fb, SMALL, "?", cx - 3, cy + 5, c); break;
     case IC_SPARK:
     case IC_STAR:
       fillTriangle(fb, cx, cy - 8, cx - 3, cy, cx + 3, cy, c);
@@ -374,6 +399,23 @@ static void icon(uint16_t *fb, uint8_t ic, int cx, int cy, uint16_t c) {
       for (int r = 0; r < 2; r++)
         for (int k = 0; k < 4; k++) fillRect(fb, cx - 7 + k * 4 + r, cy - 3 + r * 4, 3, 2, CARD);
       break;
+    case IC_GIFT:
+      fillRoundRect(fb, cx - 7, cy - 2, 14, 9, 2, c);
+      fillRoundRect(fb, cx - 8, cy - 5, 16, 4, 1, c);
+      fillRect(fb, cx - 1, cy - 5, 2, 12, CARD);
+      circle(fb, cx - 3, cy - 7, 2, c);
+      circle(fb, cx + 3, cy - 7, 2, c);
+      break;
+    case IC_DROP:
+      fillCircle(fb, cx, cy + 2, 5, c);
+      fillTriangle(fb, cx - 4, cy, cx + 4, cy, cx, cy - 8, c);
+      break;
+    case IC_BIRD:
+      fillCircle(fb, cx - 1, cy + 1, 5, c);
+      fillCircle(fb, cx + 4, cy - 3, 3, c);
+      fillTriangle(fb, cx + 6, cy - 4, cx + 10, cy - 3, cx + 6, cy - 1, c);
+      fillTriangle(fb, cx - 5, cy, cx - 10, cy - 3, cx - 9, cy + 3, c);
+      break;
     default: break;
   }
 }
@@ -410,6 +452,8 @@ static int today() {
   return (int)((time(nullptr) + clockapp::tzOffset) / 86400);
 }
 
+static const room::Def &R() { return room::DEFS[P.room]; }
+
 // ---------- Props state ----------
 enum CupState : uint8_t { CUP_ON, CUP_FALLING, CUP_BROKEN };
 static uint8_t cupState = CUP_ON;
@@ -419,11 +463,20 @@ static float boxX = -1;                       // < 0: no box
 static uint32_t boxUntil = 0;
 static float bowlX = -1, bowlFood = 0;
 static uint8_t foodKind = 0;
+static float flowerSway = 0, flowerKick = 0;  // the vase: how far the flowers lean, and a push from her paw
+static float birdX = -100;                    // a bird on the sill or the railing (< 0: none)
+static uint32_t birdUntil = 0;
+static bool birdFlying = false;
+static int giftItem = -1;                     // a gift on the floor, waiting for you (-1: none)
+static float giftX = 160;
+static uint32_t giftUntil = 0, giftNext = 0;
+static bool giftOwed = false;                 // all wishes done: she will bring one
 
 // ---------- Chindi ----------
 enum Act : uint8_t {
   IDLE, WANDER, LOAFING, GROOMING, KNEADING, STARING, ZOOMIES, CUPPUSH, BOXSIT, SUNBATHE, WINDOWWATCH,
-  LAPTOP, SLEEPING, EATING, ANNOYED, SWAT, SNEEZE, KBWALK, YAWN, REFUSE, CELEBRATE, PLAY
+  LAPTOP, SLEEPING, EATING, ANNOYED, SWAT, SNEEZE, KBWALK, YAWN, REFUSE, CELEBRATE, PLAY,
+  FLOPPING, DRINK, CLIMB, SCRATCH, RUB, SNIFF, PLANTCHEW, BEDLOAF, GIFTING
 };
 struct Cat {
   float x = 130, hop = 0, hopV = 0, base = room::CAT_Y;
@@ -467,8 +520,21 @@ static void hopUp(float v) {
   if (C.hop <= 0) C.hopV = v;
 }
 
+// she is up on something (the perch, the table, the bed, the laptop)
+static bool upHigh() { return C.base < room::CAT_Y - 1; }
+
+// put her back on the floor at once (used when the room or the mode changes)
+static void toFloor() {
+  C.base = room::CAT_Y;
+  C.hop = 0;
+  C.hopV = 0;
+  C.x = constrain(C.x, 34.0f, 290.0f);
+}
+
+// poses that show her face from the front
 static bool frontPose() {
-  return C.pose == kitty::SIT || C.pose == kitty::LOAF || C.pose == kitty::GROOM || C.pose == kitty::KNEAD;
+  return C.pose == kitty::SIT || C.pose == kitty::LOAF || C.pose == kitty::GROOM || C.pose == kitty::KNEAD ||
+         C.pose == kitty::FLOP;
 }
 
 static void celebrate(const char *msg) {
@@ -477,20 +543,19 @@ static void celebrate(const char *msg) {
   say(msg, IC_HEART, 2600);
 }
 
-static int prevLevel = 1;
 static void addXP(int n) {
   int before = level();
   P.xp += n;
   dirty = true;
   int now = level();
   if (now > before) {
-    char s[44];
+    char s[52];
     snprintf(s, sizeof(s), "Level %d! %s", now, unlockText(now));
-    toast(s, rgb(255, 200, 80), 4000);
-    if (open) celebrate("level up!");
+    toast(s, rgb(255, 200, 80), 4500);
+    if (open && !upHigh()) celebrate("level up!");
+    else if (open) confetti(C.x, 80, 50);
     saveNow();
   }
-  prevLevel = now;
 }
 
 // first interaction of a new day: keep the streak going
@@ -506,6 +571,90 @@ static void touchDay() {
     toast(s, rgb(255, 170, 60), 3500);
     if (open) confetti(160, 60, 40);
   }
+  saveNow();
+}
+
+// ---------- Discoveries: each new thing you find her doing ----------
+enum Find : uint8_t {
+  F_FOUNTAIN, F_TREE, F_SCRATCH, F_BRUSH, F_BIRD, F_FLOWERS, F_FRAMES, F_SWITCH, F_BED, F_DOOR, F_PLANT, F_CUP,
+  F_BOX, F_ZOOM, F_BLINK, F_SNEEZE, F_BELLY, F_FLOP, F_KEYS, F_LAPTOP, NFIND
+};
+static const char *const FIND_NAMES[NFIND] = {
+  "Water fountain", "Cat tree", "Scratching post", "Corner brush", "Bird watching", "Flower sniff", "Photo shelf",
+  "Light switch", "Bed nap", "The door", "Plant nibble", "Cup crash", "The box", "Zoomies", "Slow blink", "Sneeze",
+  "Belly trap", "The flop", "Keyboard walk", "Warm laptop"};
+
+static int countBits(uint32_t v) {
+  int n = 0;
+  for (; v; v &= v - 1) n++;
+  return n;
+}
+
+static void discover(uint8_t f) {
+  if (P.found & (1u << f)) return;
+  P.found |= 1u << f;
+  char s[52];
+  snprintf(s, sizeof(s), "Found: %s (%d/%d)", FIND_NAMES[f], countBits(P.found), NFIND);
+  toast(s, rgb(150, 220, 255), 3200);
+  addXP(8);
+  saveNow();
+}
+
+// ---------- Wishes: three a day, one at a time. Each one earns a treat ----------
+enum Wish : uint8_t { WI_PET, WI_FISH, WI_LASER, WI_BRUSH, WI_FOUNTAIN, WI_TREE, WI_CORNER, WI_WINDOW, WI_GAME, WI_BLINK, WI_PHOTO, NWISH };
+static const char *const WISH_NAMES[NWISH] = {"some pets", "a fish", "the laser", "a brushing", "a drink", "her cat tree",
+                                              "a cheek rub", "the window", "a mini-game", "a slow blink", "a photo"};
+static const char *const WISH_HINTS[NWISH] = {
+  "Stroke her head or back", "Dock: Feed, then Fish", "Dock: Play, then Laser", "Dock: Clean, then brush her",
+  "Tap the fountain (living room)", "Tap the cat tree (living room)", "Tap the corner brush (living room)",
+  "Tap the window", "Dock: Play, then Games", "Tap one of her eyes", "Dock: More, then Photo"};
+static const uint8_t WISH_ICONS[NWISH] = {IC_HEART, IC_FISH, IC_LASER, IC_BRUSH, IC_DROP, IC_HOUSE, IC_SPARK, IC_BIRD, IC_PAD, IC_HEART, IC_CAMERA};
+static bool bootWishes = true;                // no clock: one set of wishes each time the Pico starts
+
+static void newWishes(int day) {
+  for (int i = 0; i < 3; i++) {
+    bool again = true;
+    while (again) {
+      P.wish[i] = random(0, NWISH);
+      again = false;
+      for (int j = 0; j < i; j++)
+        if (P.wish[j] == P.wish[i]) again = true;
+    }
+  }
+  P.wishDone = 0;
+  P.wishDay = day;
+  dirty = true;
+}
+
+// With internet time: a new set each day. With no clock: a new set each time the Pico starts
+// (after a short wait, in case the time is still on its way).
+static void checkWishes() {
+  int d = today();
+  if (d >= 0) {
+    if (d != P.wishDay) newWishes(d);
+    bootWishes = false;
+  } else if (bootWishes && millis() > 20000) {
+    if (P.wishDay < 0 || P.wishDone >= 3) newWishes(-1);
+    bootWishes = false;
+  }
+}
+
+static int wishNow() { return P.wishDone < 3 ? P.wish[P.wishDone] : -1; }
+
+static void grant(uint8_t w) {
+  if (wishNow() != w) return;
+  P.wishDone++;
+  P.treats++;
+  char s[52];
+  if (P.wishDone >= 3) {
+    strlcpy(s, "All 3 wishes done! She has a gift for you", sizeof(s));
+    giftOwed = true;
+  } else {
+    snprintf(s, sizeof(s), "Wish granted! +1 treat (%d/3)", P.wishDone);
+  }
+  toast(s, rgb(255, 200, 80), 3600);
+  if (open) confetti(C.x, kitty::hit.top + 30, 36);
+  addXP(10);
   saveNow();
 }
 
@@ -534,7 +683,10 @@ static void kbStart(uint32_t now) {
   kbIdx = 0;
   kbNextChar = now + 600;
   kbToastUntil = now + 6000;
-  if (open) setAct(KBWALK, 30);
+  if (open) {
+    toFloor();
+    setAct(KBWALK, 30);
+  }
   kbSchedule(now, random(25, 61) * 60000UL);
 }
 
@@ -543,14 +695,14 @@ static void begin() {
   began = true;
   lastSave = millis();
   kbSchedule(millis(), random(25, 61) * 60000UL);
-  prevLevel = level();
+  giftNext = millis() + random(20, 40) * 60000UL;
 }
 
 // Called every frame from the main loop, whatever app is open.
 static void tick(uint32_t now, float dt) {
   if (!began) return;
   float h = dt / 3600;
-  bool asleep = C.act == SLEEPING && C.stage >= 1;
+  bool asleep = C.act == SLEEPING && C.stage >= 2;
   bump(P.hunger, -10 * h);
   bump(P.fun, (asleep ? -3 : -14) * h);
   bump(P.clean, -5 * h);
@@ -605,7 +757,7 @@ static void homePeek(uint16_t *fb, uint32_t now) {
 }
 
 static void appIcon(uint16_t *fb, int cx, int cy, uint16_t) {
-  kitty::drawHead(fb, cx, cy + 4, 0.34f, 1, 0);
+  kitty::drawHead(fb, cx, cy + 4, 0.33f, 1, 0);
 }
 
 }  // namespace chindi

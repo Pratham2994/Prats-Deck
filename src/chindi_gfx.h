@@ -19,10 +19,10 @@ struct Shape {
   float gy0, gy1;            // gradient y range (screen)
   float ow;                  // outline width, px
   uint8_t alpha;
-  int8_t clip;               // shape whose fill clips this one, or -1
+  int16_t clip;              // shape whose fill clips this one, or -1
 };
 
-static const int MAXSH = 120;     // a busy frame uses about 70
+static const int MAXSH = 160;     // a busy frame uses about 100
 static Shape SH[MAXSH];
 static int nsh = 0;
 
@@ -130,7 +130,7 @@ static int quad(float x0, float y0, float x1, float y1, float x2, float y2, floa
 static void out(int i, uint16_t c, float w = 1.3f) { if (i >= 0 && i < MAXSH) { SH[i].flags |= F_OUTLINE; SH[i].ocol = c; SH[i].ow = w * fmaxf(X.s, 0.6f); } }
 static void grad(int i, uint16_t c2) { if (i >= 0 && i < MAXSH) SH[i].col2 = c2; }
 static void alpha(int i, int a) { if (i >= 0 && i < MAXSH) SH[i].alpha = (uint8_t)constrain(a, 0, 255); }
-static void clipTo(int i, int j) { if (i >= 0 && i < MAXSH) SH[i].clip = (int8_t)j; }
+static void clipTo(int i, int j) { if (i >= 0 && i < MAXSH) SH[i].clip = (int16_t)j; }
 static void group(int i, int g) { if (i >= 0 && i < MAXSH) SH[i].group = (uint8_t)g; }
 
 // ---------- Spans ----------

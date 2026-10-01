@@ -405,6 +405,18 @@ static void shadeRect(uint16_t *fb, int x, int y, int w, int h, bool quarter = f
   }
 }
 
+// the same, with round corners: for panels that float over a picture
+static void shadeRoundRect(uint16_t *fb, int x, int y, int w, int h, int r) {
+  for (int j = 0; j < h; j++) {
+    int k = j < r ? j : (j >= h - r ? h - 1 - j : -1), in = 0;
+    if (k >= 0) {
+      float dy = r - 0.5f - k;
+      in = (int)ceilf(r - 0.5f - sqrtf(fmaxf(0, r * r - dy * dy)));
+    }
+    shadeRect(fb, x + in, y + j, w - 2 * in, 1, true);
+  }
+}
+
 static void hline(uint16_t *fb, int x, int y, int w, uint16_t col) { fillRect(fb, x, y, w, 1, col); }
 static void vline(uint16_t *fb, int x, int y, int h, uint16_t col) { fillRect(fb, x, y, 1, h, col); }
 
@@ -724,60 +736,4 @@ static int tinyWidth(const char *s, int scale = 1) { return textWidth(tinyFont(s
 
 static void tinyCenter(uint16_t *fb, const char *s, int cx, int y, uint16_t col, int scale = 1) {
   tiny(fb, s, cx - tinyWidth(s, scale) / 2, y, col, scale);
-}
-
-// Seven-segment digit with a soft halo. w x h box, t = segment thickness.
-// ch: '0'..'9', '-', ' ' or ':'.
-static void seg7(uint16_t *fb, char ch, int x, int y, int w, int h, int t, uint16_t col) {
-  static const uint8_t SEGS[10] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F};
-  uint16_t halo = dim4(col);
-  if (ch == ':') {
-    fillCircle(fb, x + w / 2, y + h / 3, t / 2 + 2, halo);
-    fillCircle(fb, x + w / 2, y + 2 * h / 3, t / 2 + 2, halo);
-    fillCircle(fb, x + w / 2, y + h / 3, t / 2, col);
-    fillCircle(fb, x + w / 2, y + 2 * h / 3, t / 2, col);
-    return;
-  }
-  uint8_t s = ch == '-' ? 0x40 : (ch >= '0' && ch <= '9') ? SEGS[ch - '0'] : 0;
-  int m = h / 2;
-  // a b c d e f g: x, y, w, h of each segment
-  const int box[7][4] = {
-    {x + t, y, w - 2 * t, t},                 // a top
-    {x + w - t, y + t, t, m - t - t / 2},     // b top right
-    {x + w - t, y + m + t / 2, t, m - t - t / 2},  // c bottom right
-    {x + t, y + h - t, w - 2 * t, t},         // d bottom
-    {x, y + m + t / 2, t, m - t - t / 2},     // e bottom left
-    {x, y + t, t, m - t - t / 2},             // f top left
-    {x + t, y + m - t / 2, w - 2 * t, t},     // g middle
-  };
-  for (int i = 0; i < 7; i++) {
-    if (!(s & (1 << i))) {
-      fillRect(fb, box[i][0], box[i][1], box[i][2], box[i][3], rgb(14, 14, 20));   // unlit ghost segment
-      continue;
-    }
-    fillRect(fb, box[i][0] - 2, box[i][1] - 2, box[i][2] + 4, box[i][3] + 4, halo);
-  }
-  for (int i = 0; i < 7; i++)
-    if (s & (1 << i)) fillRect(fb, box[i][0], box[i][1], box[i][2], box[i][3], col);
-}
-
-// String of seven-segment characters. Returns the width used.
-static int seg7Text(uint16_t *fb, const char *s, int x, int y, int w, int h, int t, uint16_t col) {
-  int x0 = x;
-  for (; *s; s++) {
-    if (*s == ':') {
-      seg7(fb, ':', x, y, t * 2, h, t, col);
-      x += t * 2 + t;
-    } else {
-      seg7(fb, *s, x, y, w, h, t, col);
-      x += w + t + 2;
-    }
-  }
-  return x - x0;
-}
-
-static int seg7Width(const char *s, int w, int t) {
-  int x = 0;
-  for (; *s; s++) x += *s == ':' ? t * 3 : w + t + 2;
-  return x;
 }

@@ -44,6 +44,7 @@ int main() {
   using namespace kitty;
   struct { const char *name; uint8_t pose; } poses[] = {
     {"cat_sit", SIT}, {"cat_loaf", LOAF}, {"cat_walk", WALK}, {"cat_curl", CURL}, {"cat_crouch", CROUCH}, {"cat_eat", EAT},
+    {"cat_flop", FLOP},
   };
   for (auto &p : poses) {
     bg(fb);
@@ -56,7 +57,8 @@ int main() {
     L.phase = 1.0f;
     if (p.pose == CROUCH) { L.crouch = 1; L.pupil = 1; }
     if (p.pose == EAT) L.headDown = 1;
-    if (p.pose == CURL) L.s = 1.0f;
+    if (p.pose == CURL || p.pose == FLOP || p.pose == LOAF || p.pose == SIT) L.s = 1.3f;
+    if (p.pose == SIT) L.y = 232;
     draw(fb, L);
     save(p.name, fb);
   }

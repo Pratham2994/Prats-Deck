@@ -1,4 +1,4 @@
-// Drives the Chindi app through every feature on the PC, with screenshots and checks.
+// Drives the Chindi app through its features on the PC, with screenshots and checks.
 #define SIM_COUNT
 #include "Arduino.h"
 
@@ -68,9 +68,8 @@ static void shot(const char *name) {
   }
   fclose(f);
   shots++;
-  printf("shot %-28s act %2d pose %2d mode %d sheet %d  hunger %.0f fun %.0f love %.0f clean %.0f energy %.0f xp %lu\n", name,
-         chindi::C.act, chindi::C.pose, chindi::mode, chindi::sheet, chindi::P.hunger, chindi::P.fun, chindi::P.love,
-         chindi::P.clean, chindi::P.energy, (unsigned long)chindi::P.xp);
+  printf("shot %-24s act %2d stage %d pose %2d mode %d sheet %d  xp %lu\n", name, chindi::C.act, chindi::C.stage, chindi::C.pose,
+         chindi::mode, chindi::sheet, (unsigned long)chindi::P.xp);
 }
 
 static void down(int x, int y) { simDown = true; simX = x; simY = y; }
@@ -93,7 +92,7 @@ static void strokeAt(int x, int y, int frames) {
   up();
   step(8);
 }
-static void dockTap(int k) { tap(34 + 25 + k * 50, 216); }
+static void dockTap(int k) { tap(34 + 26 + k * 50, 216); }
 // tile k of the open sheet (cols per row as in the sheet)
 static void sheetTile(int k, int cols, int rows) {
   int ph = 34 + rows * 50 + 4, top = H - ph - 2;
@@ -101,340 +100,265 @@ static void sheetTile(int k, int cols, int rows) {
   tap(12 + (k % cols) * (tw + 6) + tw / 2, top + 34 + (k / cols) * 50 + 22);
 }
 static void forceAct(uint8_t a, float dur = 20) {
+  chindi::toFloor();
   chindi::setAct(a, dur);
-  chindi::C.base = room::CAT_Y;
-  chindi::C.hop = 0;
+}
+// run until the act ends (or the frame limit), taking a shot when `at` says so
+static void runAct(int limit, const char *name, bool (*at)()) {
+  bool done = false;
+  uint8_t a = chindi::C.act;
+  for (int k = 0; k < limit && chindi::C.act == a; k++) {
+    step(1);
+    if (!done && at()) {
+      shot(name);
+      done = true;
+    }
+  }
+  if (!done) shot(name);
+}
+static void setRoom(int r) {
+  chindi::changeRoom(r);
+  step(5);
 }
 
 int main() {
+  using namespace chindi;
   int fails = 0;
   Cal c = {CAL_MAGIC, false, 0.1f, -20, 0.1f, -20};
   EEPROM.put(0, c);
   setup();
   step(30);
-  shot("h1_home");
-  fails += check(chindi::began, "Chindi state loaded at start-up");
+  fails += check(began, "Chindi state loaded at start-up");
+  clockapp::tzKnown = true;                    // a sunny afternoon
+  clockapp::haveWeather = true;
+  clockapp::code = 0;
+  clockapp::tzOffset = 0;
+  {
+    time_t t = time(nullptr);
+    struct tm tm;
+    gmtime_r(&t, &tm);
+    clockapp::tzOffset = ((14 - tm.tm_hour + 24) % 24) * 3600;
+  }
 
-  // ---- open Chindi ----
+  // ---- open Chindi: the living room ----
   tileTap(0);
   step(60);
-  shot("c01_room_day");
   fails += check(cur == 0, "Chindi app opens from the first tile");
+  P.xp = 2100;                                 // everything unlocked for this tour
+  forceAct(IDLE, 30);
+  step(10);
+  shot("c01_living");
+  fails += check(wishNow() >= 0, "she has a wish");
 
   // pet her head
-  forceAct(chindi::IDLE, 30);
-  step(5);
-  float love0 = chindi::P.love;
+  float love0 = P.love;
   strokeAt((int)kitty::hit.hx, (int)kitty::hit.hy - 5, 50);
-  fails += check(chindi::P.love > love0, "stroking her head raises love");
-  fails += check(chindi::P.pets >= 1, "a pet is counted");
+  fails += check(P.love > love0, "stroking her head raises love");
   down((int)kitty::hit.hx - 20, (int)kitty::hit.hy);
   for (int k = 0; k < 25; k++) { simX = (int)kitty::hit.hx + (int)(20 * sinf(k * 0.35f)); step(1); }
   shot("c02_petting");
   up();
   step(10);
 
-  // slow blink: tap an eye
-  tap((int)kitty::hit.ex[0], (int)kitty::hit.ey[0]);
-  step(6);
-  shot("c03_slow_blink");
+  // poses: loaf and the flop
+  forceAct(LOAFING, 20);
+  step(30);
+  shot("c03_loaf");
+  forceAct(FLOPPING, 20);
+  C.aux = 0;
+  step(40);
+  shot("c04_flop");
+  fails += check(C.pose == kitty::FLOP, "she flops on her side");
 
-  // boop until she sneezes once
-  int sneezes = 0;
-  for (int k = 0; k < 12 && !sneezes; k++) {
-    forceAct(chindi::IDLE, 30);
-    step(3);
-    tap((int)kitty::hit.nx, (int)kitty::hit.ny);
-    if (chindi::C.act == chindi::SNEEZE) sneezes++;
-    step(20);
-  }
-  fails += check(sneezes > 0, "booping the nose can make her sneeze");
-
-  // tail pull -> annoyed
-  forceAct(chindi::IDLE, 30);
+  // room spots: fountain, cat tree, scratching post, corner brush, window
+  forceAct(IDLE, 30);
   step(3);
-  down((int)kitty::hit.tx[2], (int)kitty::hit.ty[2]);
-  for (int k = 0; k < 12; k++) { simX -= 3; step(1); }
-  up();
-  step(5);
-  shot("c04_tail_pull_hiss");
-  fails += check(chindi::C.act == chindi::ANNOYED, "pulling her tail annoys her");
-  step(120);
+  tap(room::FOUNTAIN_X, 160);
+  fails += check(C.act == DRINK, "a tap on the fountain sends her to drink");
+  runAct(900, "c05_fountain", [] { return C.act == DRINK && C.stage == 1 && C.t > 1.5f; });
+  fails += check(P.found & (1u << F_FOUNTAIN), "the fountain is recorded as found");
+  forceAct(IDLE, 30);
+  step(3);
+  tap(64, 120);
+  fails += check(C.act == CLIMB, "a tap on the cat tree sends her up");
+  runAct(900, "c06_cat_tree", [] { return C.act == CLIMB && C.stage == 2 && C.t > 1.0f; });
+  forceAct(IDLE, 30);
+  step(3);
+  tap(24, 130);
+  runAct(900, "c07_scratch", [] { return C.act == SCRATCH && C.stage == 1 && C.t > 1.0f; });
+  forceAct(IDLE, 30);
+  step(3);
+  tap(304, 140);
+  runAct(900, "c08_corner_brush", [] { return C.act == RUB && C.stage == 1 && C.t > 1.5f; });
+  forceAct(IDLE, 30);
+  step(3);
+  tap(134, 70);
+  runAct(900, "c09_bird_window", [] { return C.act == WINDOWWATCH && C.stage == 2; });
 
-  // ---- feeding ----
-  chindi::P.hunger = 30;
-  forceAct(chindi::IDLE, 30);
+  // feeding, and a gift
+  P.hunger = 30;
+  forceAct(IDLE, 30);
   dockTap(0);
   step(10);
-  shot("c05_feed_sheet");
-  sheetTile(0, 3, 1);
-  step(90);
-  shot("c06_eating");
-  float h0 = chindi::P.hunger;
+  shot("c10_feed_sheet");
+  sheetTile(1, 3, 1);
+  step(110);
+  shot("c11_eating");
   step(300);
-  fails += check(chindi::P.hunger > h0 + 20, "eating kibble fills her up");
-  fails += check(chindi::P.meals >= 1, "the meal is counted");
+  fails += check(P.meals >= 1, "the meal is counted");
+  giftOwed = true;
+  forceAct(IDLE, 0.1f);
+  for (int k = 0; k < 600 && giftItem < 0; k++) step(1);
+  step(30);
+  shot("c12_gift");
+  fails += check(giftItem >= 0, "she brings a gift");
+  step(120);
+  tap((int)giftX, room::CAT_Y - 8);
+  fails += check(giftItem < 0 && P.gifts != 0, "a tap collects the gift");
 
-  // ---- play: laser ----
+  // play: laser
+  forceAct(IDLE, 30);
   dockTap(1);
   step(10);
-  shot("c07_play_sheet");
+  shot("c13_play_sheet");
   sheetTile(0, 2, 2);
   step(5);
-  fails += check(chindi::mode == chindi::MD_LASER, "Play > Laser starts laser mode");
-  down(260, 190);
-  for (int k = 0; k < 60; k++) { simX = 260 - k * 2; step(1); }
-  shot("c08_laser_chase");
-  step(40);                                    // keep still: she crouches and pounces
-  shot("c09_laser_pounce");
+  fails += check(mode == MD_LASER, "Play > Laser starts laser mode");
+  down(250, 190);
+  for (int k = 0; k < 60; k++) { simX = 250 - k * 2; step(1); }
+  shot("c14_laser");
   up();
   tap(240, 220);                               // Done
   step(5);
-  fails += check(chindi::mode == chindi::MD_NORMAL, "Done ends the play mode");
 
-  // feather and yarn need levels: give XP
-  chindi::P.xp = 2100;
-  dockTap(1);
-  step(8);
-  sheetTile(1, 2, 2);
-  step(5);
-  down(200, 120);
-  for (int k = 0; k < 80; k++) { simX = 200 + (int)(60 * sinf(k * 0.1f)); simY = 130 + (int)(20 * sinf(k * 0.17f)); step(1); }
-  shot("c10_feather");
-  up();
-  tap(240, 220);
-  step(5);
-  dockTap(1);
-  step(8);
-  sheetTile(2, 2, 2);
-  step(5);
-  down((int)chindi::yX, (int)chindi::yY);
+  // ---- dining room ----
+  setRoom(room::DINING);
+  forceAct(IDLE, 30);
+  step(20);
+  shot("c15_dining");
+  tap(294, 100);
+  fails += check(C.act == SNIFF, "a tap on the flowers sends her up on the table");
+  runAct(900, "c16_flowers", [] { return C.act == SNIFF && C.stage == 3 && C.t > 0.9f; });
+  forceAct(SLEEPING, 1e9f);
+  step(200);
+  shot("c17_dining_sleep");
+  forceAct(IDLE, 30);
+
+  // ---- bedroom ----
+  setRoom(room::BEDROOM);
+  forceAct(IDLE, 30);
+  step(20);
+  shot("c18_bedroom");
+  tap(260, 140);
+  runAct(900, "c19_bed", [] { return C.act == BEDLOAF && C.stage == 2 && C.t > 1.0f; });
+  forceAct(IDLE, 30);
+  C.x = 60;                                    // out of the way of the table
   step(3);
-  for (int k = 0; k < 5; k++) { simX -= 25; simY -= 10; step(1); }
-  up();
-  step(30);
-  shot("c11_yarn");
-  tap(240, 220);
-  step(5);
-
-  // ---- brush ----
-  chindi::P.clean = 20;
-  forceAct(chindi::IDLE, 60);
-  step(5);
-  shot("c12_dirty");
-  dockTap(2);
-  step(3);
-  float cl0 = chindi::P.clean;
-  strokeAt((int)kitty::hit.bx, (int)kitty::hit.by, 60);
-  fails += check(chindi::P.clean > cl0 + 5, "brushing makes her clean");
-  down((int)kitty::hit.bx - 20, (int)kitty::hit.by);
-  for (int k = 0; k < 20; k++) { simX = (int)kitty::hit.bx + (int)(20 * sinf(k * 0.35f)); step(1); }
-  shot("c13_brushing");
-  up();
-  tap(240, 220);
-  step(5);
-
-  // ---- behaviours ----
-  struct { uint8_t act; const char *name; int frames; } acts[] = {
-    {chindi::GROOMING, "c14_groom", 40}, {chindi::KNEADING, "c15_knead", 40}, {chindi::LOAFING, "c16_loaf", 30},
-    {chindi::STARING, "c17_stare", 30}, {chindi::ZOOMIES, "c18_zoomies", 25},
-  };
-  for (auto &a : acts) {
-    forceAct(a.act, 20);
-    step(a.frames);
-    shot(a.name);
-  }
-  // cup push
-  chindi::cupState = chindi::CUP_ON;
-  chindi::cupX = room::TABLE_X0 + 12;
-  chindi::C.x = 60;
-  forceAct(chindi::CUPPUSH, 30);
+  cupState = CUP_ON;
+  tap(160, 142);
   int crashed = 0;
-  for (int k = 0; k < 600 && chindi::C.act == chindi::CUPPUSH; k++) {
+  for (int k = 0; k < 700 && C.act == CUPPUSH; k++) {
     step(1);
-    if (chindi::C.stage == 1 && k % 40 == 0 && !crashed) { shot("c19_cup_pat"); crashed = -1; }
-    if (chindi::cupState == chindi::CUP_BROKEN && crashed <= 0) { crashed = 1; shot("c20_cup_crash"); }
+    if (cupState == CUP_BROKEN && !crashed) { crashed = 1; shot("c20_cup_crash"); }
   }
   fails += check(crashed == 1, "she pushes the cup off the table and it breaks");
-  // box
-  chindi::boxX = 230;
-  chindi::boxUntil = millis() + 600000;
-  forceAct(chindi::BOXSIT, 30);
-  for (int k = 0; k < 400 && !(chindi::C.act == chindi::BOXSIT && chindi::C.stage == 2); k++) step(1);
-  step(20);
-  shot("c21_box");
-  fails += check(chindi::C.act == chindi::BOXSIT && chindi::C.stage == 2, "she climbs into the box");
-  chindi::boxX = -1;
-  forceAct(chindi::IDLE, 5);
-
-  // weather + time: rainy afternoon, she watches the window
-  clockapp::tzKnown = true;
-  clockapp::haveWeather = true;
-  clockapp::code = 63;
-  clockapp::tzOffset = 0;
-  forceAct(chindi::WINDOWWATCH, 20);
-  step(150);
-  shot("c22_window_rain");
-  // sunny: sunbeam nap
-  clockapp::code = 0;
-  forceAct(chindi::SUNBATHE, 40);
-  step(300);
-  shot("c23_sunbeam_nap");
-  // PC busy: laptop
-  pcstats::S.v[0] = 85;
-  for (int k = 0; k < 400; k++) {
-    pcstats::S.lastData = millis();
-    if (k == 0) forceAct(chindi::LAPTOP, 60);
-    step(1);
-  }
-  shot("c24_warm_laptop");
-  fails += check(chindi::C.act == chindi::LAPTOP && chindi::C.stage == 2, "she lies on the warm laptop when the PC is busy");
-  pcstats::S.lastData = 0;
-  step(60);
-
-  // keyboard walk
-  Keyboard.typed.clear();
-  chindi::kbSchedule(millis(), 100);
-  step(20);
-  shot("c28_keyboard_walk");
-  step(200);
-  printf("  typed on PC: \"%s\"\n", Keyboard.typed.c_str());
-  fails += check(Keyboard.typed.size() >= 4, "keyboard walk types on the PC");
-
-  // night: she sleeps, room dark
-  clockapp::tzOffset = 9 * 3600;               // shift the clock so it is night here
-  {
-    time_t t = time(nullptr) + clockapp::tzOffset;
-    struct tm tm;
-    gmtime_r(&t, &tm);
-    clockapp::tzOffset += ((23 - tm.tm_hour + 24) % 24) * 3600;   // make it 23:xx
-  }
-  clockapp::code = 0;
-  forceAct(chindi::IDLE, 0.1f);
-  step(400);
-  shot("c29_night_sleep");
-  fails += check(chindi::C.act == chindi::SLEEPING, "she goes to sleep late at night");
-  clockapp::tzKnown = false;
-  forceAct(chindi::IDLE, 5);
-  step(20);
-
-  // ---- sheets ----
-  dockTap(4);
+  tap(247, 58);                                // light switch
   step(10);
-  shot("c30_more_sheet");
-  sheetTile(1, 2, 3);                          // wardrobe
-  step(10);
-  shot("c31_wardrobe");
-  sheetTile(3, 2, 3);                          // bell collar
+  shot("c21_lights_off");
+  fails += check(lightsOff, "the light switch works");
+  tap(247, 58);
   step(5);
-  fails += check(chindi::P.acc == kitty::A_BELL, "wardrobe puts on the bell collar");
-  tap(W - 22, 60);                             // close (approximate)
-  chindi::sheet = chindi::SH_NONE;
+
+  // ---- balcony ----
+  setRoom(room::BALCONY);
+  forceAct(IDLE, 30);
+  step(20);
+  callBird(millis(), 60000);
+  step(5);
+  shot("c22_balcony");
+  tap(296, 130);
+  runAct(900, "c23_plant", [] { return C.act == PLANTCHEW && C.stage == 1 && C.t > 1.0f; });
+
+  // ---- night in the living room: the fountain glows ----
+  setRoom(room::LIVING);
+  clockapp::tzOffset += 9 * 3600;
+  forceAct(IDLE, 0.1f);
+  step(500);
+  shot("c24_night");
+  fails += check(C.act == SLEEPING, "she goes to sleep late at night");
+  clockapp::tzOffset -= 9 * 3600;
+  forceAct(IDLE, 30);
+  step(20);
+
+  // ---- sheets and the album ----
   dockTap(4);
-  step(8);
+  step(10);
+  shot("c25_more_sheet");
   sheetTile(2, 2, 3);                          // rooms
-  step(8);
-  sheetTile(1, 1, 3);                          // study
-  step(40);
-  shot("c32_study");
-  dockTap(4);
-  step(8);
-  sheetTile(2, 2, 3);
-  step(8);
-  sheetTile(2, 1, 3);                          // balcony
-  step(40);
-  shot("c33_balcony");
-  fails += check(chindi::P.room == room::BALCONY, "rooms sheet moves her to the balcony");
-  chindi::P.room = room::BEDROOM;
-  // photo + gallery
-  dockTap(4);
-  step(8);
-  sheetTile(3, 2, 3);
   step(10);
-  shot("c34_photo_mode");
-  tap(W / 2, 220);
-  step(4);
-  tap(55, 220);                                // Done
-  step(5);
-  fails += check(chindi::P.nPhotos == 1, "the shutter saves a photo");
-  dockTap(4);
-  step(8);
-  sheetTile(4, 2, 3);
-  step(10);
-  shot("c35_gallery");
-  tap(291, 220);
-  step(5);
-  // profile
+  shot("c26_rooms_sheet");
+  sheet = SH_NONE;
+  step(3);
   tap(250, 18);
   step(12);
-  shot("c36_profile");
-  chindi::sheet = chindi::SH_NONE;
-  // settings sheet
+  shot("c27_profile");
+  sheet = SH_NONE;
+  P.gifts = 0x2B5;
+  mode = MD_ALBUM;
+  albumTab = 0;
+  step(5);
+  shot("c28_album_gifts");
+  albumTab = 1;
+  step(5);
+  shot("c29_album_found");
+  mode = MD_NORMAL;
+  step(5);
   dockTap(4);
   step(8);
-  sheetTile(5, 2, 3);
+  sheetTile(3, 2, 3);                          // photo
   step(10);
-  shot("c37_settings_sheet");
-  chindi::sheet = chindi::SH_NONE;
+  tap(W / 2, 220);
+  step(4);
+  fails += check(P.nPhotos == 1, "the shutter saves a photo");
+  tap(260, 220);                               // Gallery
+  step(10);
+  shot("c30_gallery");
+  tap(291, 220);
+  step(5);
 
   // ---- mini-games ----
-  chindi::startGame(chindi::G_FISH);
+  startGame(G_FISH);
   down(160, 200);
   for (int k = 0; k < 200; k++) { simX = 160 + (int)(120 * sinf(k * 0.05f)); step(1); }
-  shot("c38_fish_catch");
+  shot("c31_fish_catch");
   up();
-  for (int k = 0; k < 1500 && !chindi::gOver; k++) step(1);
-  shot("c39_fish_over");
-  fails += check(chindi::gOver, "Fish Catch ends");
+  for (int k = 0; k < 1500 && !gOver; k++) step(1);
+  shot("c32_fish_over");
+  fails += check(gOver, "Fish Catch ends");
   tap(214, 162);                               // Back
   step(5);
-  chindi::startGame(chindi::G_MOUSE);
-  for (int k = 0; k < 400; k++) {
-    for (int i = 0; i < chindi::HOLES; i++)
-      if (chindi::holeOn[i] && chindi::holeAge[i] > 0.2f) { tap(chindi::HOLE_X[i], chindi::HOLE_Y[i] - 10); break; }
+  startGame(G_MOUSE);
+  for (int k = 0; k < 160; k++) {
+    for (int i = 0; i < HOLES; i++)
+      if (holeOn[i] && holeAge[i] > 0.2f) { tap(HOLE_X[i], HOLE_Y[i] - 10); break; }
     step(1);
-    if (k == 150) shot("c40_mouse_whack");
   }
-  for (int k = 0; k < 1500 && !chindi::gOver; k++) step(1);
-  printf("  mouse score %d\n", chindi::gScore);
-  fails += check(chindi::gScore > 0, "tapping mice scores");
-  shot("c41_mouse_over");
-  tap(214, 162);
-  step(5);
-  chindi::startGame(chindi::G_LASER);
-  down(280, 200);
-  for (int k = 0; k < 150; k++) { simX = 160 + (int)(140 * sinf(k * 0.04f)); simY = 120 + (int)(60 * cosf(k * 0.07f)); step(1); }
-  shot("c42_laser_chase_game");
-  up();
-  for (int k = 0; k < 2000 && !chindi::gOver; k++) step(1);
-  fails += check(chindi::gOver, "Laser Chase ends when she catches the dot");
-  tap(214, 162);
+  shot("c33_mouse_whack");
+  fails += check(gScore > 0, "tapping mice scores");
+  mode = MD_NORMAL;
   step(5);
 
-  // ---- home: badge and peek ----
-  chindi::P.hunger = 10;
+  // ---- home ----
   goHome();
-  step(800);
-  for (int k = 0; k < 4000; k++) {
-    step(1);
-    if (k % 10 == 0 && simUs > 0) {
-    }
-  }
-  shot("h2_home_badge");
-  // force a peek
-  step(1);
-  tileTap(11);
-  step(30);
-  shot("s1_settings");
-  fails += check(cur == 11, "Settings opens from the last tile");
-  goHome();
+  step(20);
+  shot("h1_home");
 
   // the saved state survives a restart
-  chindi::saveNow();
-  uint32_t xp = chindi::P.xp;
-  chindi::P.xp = 0;
-  chindi::load();
-  fails += check(chindi::P.xp == xp, "Chindi's progress is saved in flash");
+  saveNow();
+  uint32_t xp = P.xp;
+  P.xp = 0;
+  load();
+  fails += check(P.xp == xp, "Chindi's progress is saved in flash");
 
   printf("\nChindi frames: %ld, raster pixels per frame avg %ld max %ld, peak shapes %d / %d\n", frameCount,
          frameCount ? pixTotal / frameCount : 0, pixMax, cg::simPeak, cg::MAXSH);

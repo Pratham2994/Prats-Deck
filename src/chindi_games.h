@@ -51,6 +51,7 @@ static void startGame(uint8_t g) {
   gCat = Cat();
   gCat.x = 60;
   for (auto &p : parts) p.life = 0;
+  toFloor();
   touchDay();
 }
 
@@ -68,6 +69,7 @@ static void endGame() {
   bump(P.fun, fminf(30, 8 + pts));
   bump(P.energy, -5);
   addXP(4 + pts / 2);
+  grant(WI_GAME);
   saveNow();
 }
 
@@ -112,7 +114,7 @@ static void mouseShape(float x, float y, bool gold) {
 
 static void gameBar(uint16_t *fb, const char *title) {
   shadeRect(fb, 0, 0, W, 24, true);
-  text(fb, SMALL, title, 30, 17, WHITE);
+  text(fb, SMALL, title, 32, 17, INK);
   char s[32];
   if (game == G_LASER) snprintf(s, sizeof(s), "%d.%d s", gScore / 10, gScore % 10);
   else snprintf(s, sizeof(s), "%d", gScore);
@@ -288,6 +290,10 @@ static void mouseGame(uint16_t *fb, float dt) {
 // ---- Laser Chase ----
 static void laserGame(uint16_t *fb, float dt) {
   room::draw(fb, P.room, E, worldT);
+  cg::begin();
+  drawProps(P.room, E, true, room::TABLE_X0 + 12, 0);
+  cg::X.set(0, 0, 1, false);
+  cg::render(fb);
   if (!gOver) {
     gT += dt;
     gScore = (int)(gT * 10);

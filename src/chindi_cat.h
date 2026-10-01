@@ -1,24 +1,25 @@
 // chindi_cat.h
-// Chindi, drawn from smooth shapes: white with an orange cap split by a white blaze,
-// orange round the eyes, pink ears and nose, green-gold eyes, orange back and hip
-// patches, and a striped tail. Front poses (sit, loaf, groom, knead, box), side poses
-// (walk, run, crouch, pounce, bat, eat) and a curled sleeping pose.
+// Chindi, drawn from smooth shapes after her photos: a white cat with an orange cap over
+// both ears, a white blaze, a pink nose, gold-green eyes, a striped orange saddle on her
+// back, an orange patch on the back leg and a tail with orange and cream rings.
+// Front poses (sit, loaf, groom, knead, box), side poses (walk, run, crouch, pounce, bat,
+// eat), a curled sleeping pose, and her favourite: flat on her side.
 #pragma once
 
 #include "chindi_gfx.h"
 
 namespace kitty {
 
-// ---------- Colours (from her photo) ----------
-static const uint16_t FUR = rgb(250, 247, 241), FUR_SH = rgb(226, 217, 206), FUR_FAR = rgb(212, 202, 190);
-static const uint16_t ORG = rgb(234, 146, 66), ORG_L = rgb(245, 178, 104), ORG_D = rgb(204, 116, 46);
-static const uint16_t PINK = rgb(242, 170, 162), NOSE = rgb(232, 146, 148), NOSE_D = rgb(196, 112, 118);
-static const uint16_t IRIS_T = rgb(214, 208, 118), IRIS_B = rgb(140, 164, 78), PUPIL = rgb(26, 24, 20);
-static const uint16_t LINE = rgb(92, 64, 48), SOFT = rgb(206, 192, 178), MOUTH = rgb(120, 82, 70);
-static const uint16_t TAIL_A = rgb(214, 150, 94), TAIL_B = rgb(150, 98, 62);
-static const uint16_t WHISK = rgb(255, 255, 255), WHISK_O = rgb(168, 158, 148);
+// ---------- Colours (from her photos) ----------
+static const uint16_t FUR = rgb(252, 249, 244), FUR_SH = rgb(228, 220, 210), FUR_FAR = rgb(214, 205, 194);
+static const uint16_t ORG = rgb(236, 150, 70), ORG_L = rgb(246, 184, 112), ORG_D = rgb(206, 120, 50);
+static const uint16_t STRIPE = rgb(212, 122, 50), CREAM = rgb(250, 228, 194);
+static const uint16_t PINK = rgb(244, 176, 170), NOSE = rgb(236, 150, 152), NOSE_D = rgb(200, 116, 122);
+static const uint16_t IRIS_T = rgb(236, 192, 66), IRIS_B = rgb(180, 180, 70), PUPIL = rgb(24, 22, 20);
+static const uint16_t LINE = rgb(122, 94, 78), LID = rgb(70, 50, 40), SOFT = rgb(204, 192, 180), MOUTH = rgb(140, 100, 90);
+static const uint16_t WHISK = rgb(255, 255, 255), WHISK_O = rgb(186, 178, 170);
 
-enum Pose : uint8_t { SIT, LOAF, GROOM, KNEAD, WALK, RUN, CROUCH, POUNCE, BAT, EAT, CURL };
+enum Pose : uint8_t { SIT, LOAF, GROOM, KNEAD, WALK, RUN, CROUCH, POUNCE, BAT, EAT, CURL, FLOP };
 enum Mouth : uint8_t { M_CLOSED, M_MEOW, M_HISS, M_TONGUE, M_YAWN };
 enum Acc : uint8_t { A_NONE, A_BANDANA, A_BOW, A_BELL, A_HAT, A_CROWN, NACC };
 
@@ -70,19 +71,19 @@ static void bez(const float *p, float t, float &x, float &y) {
   y = u * u * u * p[1] + 3 * u * u * t * p[3] + 3 * u * t * t * p[5] + t * t * t * p[7];
 }
 
-// striped tail along a curve, segments t0..t1 of n
+// ringed tail along a curve, segments k0..k1 of n: orange with cream rings and a dark tip
 static void tailCurve(const float *p, int n, int k0, int k1, float r0, float r1, float puff, int grp) {
   for (int k = k0; k < k1; k++) {
     float xa, ya, xb, yb;
     bez(p, (float)k / n, xa, ya);
     bez(p, (float)(k + 1) / n, xb, yb);
     float r = (r0 + (r1 - r0) * k / n) * (1 + puff * 0.7f);
-    int i = cap(xa, ya, xb, yb, r, ((k / 2) % 2) ? TAIL_B : TAIL_A);
-    out(i, LINE, 1.2f);
+    int i = cap(xa, ya, xb, yb, r, (k % 3 == 2) ? CREAM : ORG);
+    out(i, LINE, 1.1f);
     group(i, grp);
     if (k == n - 1) {                        // darker tip
-      int j = ell(xb, yb, r * 0.95f, r * 0.95f, 0, TAIL_B);
-      out(j, LINE, 1.2f);
+      int j = ell(xb, yb, r * 0.95f, r * 0.95f, 0, ORG_D);
+      out(j, LINE, 1.1f);
       group(j, grp);
     }
   }
@@ -96,13 +97,28 @@ static void tailPoints(const float *p) {
   }
 }
 
+// a few short tabby stripes across a patch, clipped to shape `clip`
+static void stripes(float x, float y, float dx, int n, float len, float lean, int clip, float w = 1.6f) {
+  for (int k = 0; k < n; k++) {
+    int s = cap(x + k * dx, y, x + k * dx + lean, y + len, w, STRIPE);
+    clipTo(s, clip);
+    alpha(s, 190);
+  }
+}
+
+// pink toe pads on the sole of a paw
+static void beans(float x, float y, float s) {
+  ell(x, y + 1.2f * s, 2.6f * s, 2.1f * s, 0, PINK);
+  for (int k = -1; k <= 1; k++) ell(x + k * 2.7f * s, y - 2.0f * s, 1.2f * s, 1.3f * s, 0, PINK);
+}
+
 // closed eye as a curve: up = happy ^ shape, else a sleepy smile
 static void closedEye(float ex, float ey, float w, bool up) {
   float px = 0, py = 0;
   for (int k = 0; k <= 4; k++) {
     float u = k / 4.0f, x = ex - w + 2 * w * u;
     float y = up ? ey + 2 - 5 * sinf(3.14159f * u) : ey - 1 + 3.5f * sinf(3.14159f * u);
-    if (k) cap(px, py, x, y, 1.15f, LINE);
+    if (k) cap(px, py, x, y, 1.1f, LID);
     px = x;
     py = y;
   }
@@ -119,12 +135,13 @@ static void eye(const Look &L, float ex, float ey, float rx, float ry, float ang
     return;
   }
   float cy = ey + (1 - o) * ry * 0.45f;
+  ell(ex, cy - 0.8f, rx + 0.7f, ry * o + 0.3f, ang, LID);     // dark upper lid, like eyeliner
   int iris = ell(ex, cy, rx, ry * o, ang, IRIS_T);
   grad(iris, IRIS_B);
-  out(iris, LINE, 1.4f);
-  int p = ell(ex + L.lookX * 3.2f * lookScale, cy + L.lookY * 2 * lookScale, 1.7f + pr * 4.4f, ry * 0.86f * o, 0, PUPIL);
+  out(iris, LID, 0.8f);
+  int p = ell(ex + L.lookX * 3.0f * lookScale, cy + L.lookY * 1.8f * lookScale, 1.5f + pr * 4.3f, ry * 0.88f * o, 0, PUPIL);
   clipTo(p, iris);
-  int h1 = ell(ex - rx * 0.3f + L.lookX * lookScale, cy - ry * 0.38f * o, rx * 0.24f, rx * 0.22f, 0, WHITE);
+  int h1 = ell(ex - rx * 0.3f + L.lookX * lookScale, cy - ry * 0.38f * o, rx * 0.25f, rx * 0.23f, 0, WHITE);
   clipTo(h1, iris);
   int h2 = ell(ex + rx * 0.32f, cy + ry * 0.3f * o, rx * 0.11f, rx * 0.11f, 0, WHITE);
   clipTo(h2, iris);
@@ -133,9 +150,9 @@ static void eye(const Look &L, float ex, float ey, float rx, float ry, float ang
 
 static void whiskers(float rootX, float rootY, float side, float len, float droop) {
   for (int k = 0; k < 3; k++) {
-    int i = cap(rootX, rootY + k * 2.4f, rootX + side * len, rootY - 3 + k * (6 + droop), 0.55f, WHISK);
-    out(i, WHISK_O, 0.45f);
-    alpha(i, 225);
+    int i = cap(rootX, rootY + k * 2.4f, rootX + side * len, rootY - 3 + k * (6 + droop), 0.5f, WHISK);
+    out(i, WHISK_O, 0.4f);
+    alpha(i, 215);
   }
 }
 
@@ -185,37 +202,55 @@ static void accessoryHead(uint8_t acc) {
   }
 }
 
-// ---------- Front head (also used for the home screen peek and icon) ----------
+// ---------- Front head (also used for the home screen chip, peek and icon) ----------
+// The head is drawn round (0, -122). details = false leaves out the small parts.
 static void headFront(const Look &L, bool details = true) {
   // ears (drawn first, so the head covers their base)
   for (int side = -1; side <= 1; side += 2) {
     float tw = side < 0 ? L.twitchL : L.twitchR;
     Xf save = X;
     X = X.rotAbout(side * 24, -134, side * (L.earBack * 0.75f + tw * 0.25f));
-    int o = tri(side * 11, -146, side * 38, -121, side * 33, -172, ORG);
+    int o = tri(side * 9, -147, side * 39, -122, side * 35, -176, ORG);
     grad(o, ORG_D);
-    out(o, LINE, 1.3f);
+    out(o, LINE, 1.2f);
     group(o, 2);
-    int in = tri(side * 16, -142, side * 31, -127, side * 31, -163, PINK);
+    int in = tri(side * 16, -143, side * 32, -128, side * 32, -165, PINK);
     grad(in, ORG_L);
     alpha(in, 235);
+    if (details) {                             // pale fur at the base of the ear
+      int tuft = tri(side * 17, -140, side * 27, -133, side * 25, -153, FUR);
+      alpha(tuft, 215);
+    }
     X = save;
   }
+  // cheek fur points
+  for (int side = -1; side <= 1; side += 2) {
+    int c = tri(side * 35, -116, side * 46, -105, side * 34, -98, FUR);
+    out(c, LINE, 1.2f);
+    group(c, 2);
+  }
   int head = ell(0, -122, 37, 31, 0, FUR);
-  out(head, LINE, 1.3f);
+  out(head, LINE, 1.2f);
   group(head, 2);
   int cheeks = ell(0, -108, 40, 21, 0, FUR);
-  out(cheeks, LINE, 1.3f);
+  grad(cheeks, rgb(240, 234, 226));
+  out(cheeks, LINE, 1.2f);
   group(cheeks, 2);
   // orange cap round the eyes, white blaze down the middle
   for (int side = -1; side <= 1; side += 2) {
     int p = ell(side * 25, -131, 25, 23, side * -0.25f, ORG);
     grad(p, ORG_L);
     clipTo(p, head);
+    if (details) {                             // tabby marks on the forehead
+      int s1 = cap(side * 13, -151, side * 17, -141, 1.2f, STRIPE);
+      clipTo(s1, head);
+      int s2 = cap(side * 23, -149, side * 27, -139, 1.2f, STRIPE);
+      clipTo(s2, head);
+    }
   }
   int blaze = quad(-3.2f, -156, 3.2f, -156, 10, -110, -10, -110, FUR);
   clipTo(blaze, head);
-  int muzzle = ell(0, -104, 19, 12.5f, 0, rgb(255, 253, 249));
+  int muzzle = ell(0, -104, 19, 12.5f, 0, rgb(255, 254, 251));
   clipTo(muzzle, cheeks);
   if (L.dirty) {
     int d1 = ell(-20, -114, 2.2f, 1.6f, 0.4f, rgb(140, 118, 96));
@@ -223,13 +258,13 @@ static void headFront(const Look &L, bool details = true) {
     int d2 = ell(24, -102, 1.8f, 1.4f, 0, rgb(140, 118, 96));
     alpha(d2, 150);
   }
-  // eyes
-  for (int side = -1; side <= 1; side += 2) eye(L, side * 15.5f, -116, 9.5f, 8.8f, side * -0.13f, L.pupil, 1);
+  // eyes: almond shaped, the outer corners a little higher
+  for (int side = -1; side <= 1; side += 2) eye(L, side * 15.5f, -116, 8.8f, 7.9f, side * -0.2f, L.pupil, 1);
   if (!details) return;
   // nose and mouth
-  int nose = tri(-5.5f, -106.5f, 5.5f, -106.5f, 0, -100.5f, NOSE);
+  int nose = tri(-5, -106.5f, 5, -106.5f, 0, -101, NOSE);
   out(nose, NOSE_D, 0.8f);
-  ell(-1.6f, -105.2f, 1.4f, 0.9f, 0, rgb(250, 200, 200));
+  ell(-1.5f, -105.3f, 1.3f, 0.8f, 0, rgb(252, 208, 208));
   switch (L.mouth) {
     case M_MEOW:
     case M_YAWN: {
@@ -248,11 +283,11 @@ static void headFront(const Look &L, bool details = true) {
       break;
     }
     default:
-      cap(0, -100.5f, 0, -98, 0.7f, MOUTH);
-      cap(0, -98, -3.2f, -95.8f, 0.7f, MOUTH);
-      cap(-3.2f, -95.8f, -6.2f, -97.4f, 0.7f, MOUTH);
-      cap(0, -98, 3.2f, -95.8f, 0.7f, MOUTH);
-      cap(3.2f, -95.8f, 6.2f, -97.4f, 0.7f, MOUTH);
+      cap(0, -101, 0, -98, 0.65f, MOUTH);
+      cap(0, -98, -3.2f, -95.8f, 0.65f, MOUTH);
+      cap(-3.2f, -95.8f, -6.2f, -97.4f, 0.65f, MOUTH);
+      cap(0, -98, 3.2f, -95.8f, 0.65f, MOUTH);
+      cap(3.2f, -95.8f, 6.2f, -97.4f, 0.65f, MOUTH);
       if (L.mouth == M_TONGUE) {
         int tg = ell(0, -94, 2.6f, 2.6f, 0, PINK);
         out(tg, NOSE_D, 0.6f);
@@ -271,22 +306,35 @@ static void headFront(const Look &L, bool details = true) {
   }
 }
 
+// touch areas of the front head. Call with X set as for headFront.
+static void headHits(float scale) {
+  X.apply(0, -122, hit.hx, hit.hy);
+  hit.hr = 40 * scale;
+  X.apply(0, -103, hit.nx, hit.ny);
+  X.apply(-15.5f, -116, hit.ex[0], hit.ey[0]);
+  X.apply(15.5f, -116, hit.ex[1], hit.ey[1]);
+  X.apply(0, -90, hit.cx, hit.cy);
+  float tmp;
+  X.apply(0, -175, tmp, hit.top);
+}
+
 // ---------- Front poses: SIT, LOAF, GROOM, KNEAD (+ in a box) ----------
 static void front(const Look &L) {
   float shake = sinf(L.t * 70) * L.purr * 0.6f;
   X.set(L.x + shake, L.y, L.s, L.flip);
   float br = sinf(L.breath);
   bool loaf = L.pose == LOAF;
-  float headDrop = loaf ? 30 : 0;
+  // In a loaf she folds her legs under her: a wide, low body with the head set into its front.
+  float headDrop = loaf ? 45 : 0;
 
-  int sh = ell(0, -1, loaf ? 50 : 46, 7, 0, BLACK);
+  int sh = ell(0, -1, loaf ? 56 : 46, 7, 0, BLACK);
   alpha(sh, 45);
 
   // tail: starts behind the body, wraps round the front paws
   float sway = sinf(L.t * 1.3f) * 7 * L.tailSwing + sinf(L.t * 4.1f) * 2 * L.tailSwing;
   float tp[8] = {24, -22, 62, -2, 32, 13, -36 + sway, 6};
   if (loaf) {
-    float lp[8] = {34, -14, 56, 0, 24, 6, -38 + sway, -2};
+    float lp[8] = {42, -14, 66, 2, 26, 9, -40 + sway, 1};
     memcpy(tp, lp, sizeof(tp));
   }
   if (!L.inBox) tailCurve(tp, 16, 0, 5, 7.5f, 5.5f, L.tailPuff, 3);
@@ -294,32 +342,41 @@ static void front(const Look &L) {
   // body
   int body;
   if (loaf) {
-    body = ell(0, -30 - br * 0.6f, 42 + br * 0.8f, 30 + br * 0.8f, 0, FUR);
+    body = ell(0, -27 - br * 0.5f, 51 + br * 0.6f, 28 + br * 0.7f, 0, FUR);
   } else {
-    body = ell(0, -52, 33 + br * 0.9f, 48 + br * 0.5f, 0, FUR);
-    int hl = ell(-21, -24, 18, 22, 0.25f, FUR);
-    int hr = ell(21, -24, 18, 22, -0.25f, FUR);
-    out(hl, LINE, 1.3f);
-    out(hr, LINE, 1.3f);
+    body = ell(0, -51, 35 + br * 0.9f, 48 + br * 0.5f, 0, FUR);
+    int hl = ell(-22, -23, 19, 22, 0.25f, FUR);
+    int hr = ell(22, -23, 19, 22, -0.25f, FUR);
+    out(hl, LINE, 1.2f);
+    out(hr, LINE, 1.2f);
     group(hl, 1);
     group(hr, 1);
     grad(hl, FUR_SH);
     grad(hr, FUR_SH);
   }
   grad(body, FUR_SH);
-  out(body, LINE, 1.3f);
+  out(body, LINE, 1.2f);
   group(body, 1);
-  // orange back and hip patches
+  // orange saddle and hip patches, with tabby stripes
   if (loaf) {
-    int p = ell(0, -58, 40, 14, 0, ORG);
+    int p = ell(0, -53, 50, 17, 0, ORG);
+    grad(p, ORG_L);
     clipTo(p, body);
-    int q = ell(34, -38, 14, 18, 0, ORG);
+    stripes(-40, -55, 11, 8, 12, 2, body);
+    int q = ell(42, -30, 16, 20, 0, ORG);
     clipTo(q, body);
+    int bib = ell(0, -26, 22, 20, 0, rgb(255, 254, 251));    // white chest under the chin
+    alpha(bib, 225);
   } else {
-    int p = ell(-35, -42, 14, 26, 0, ORG);
+    int p = ell(-37, -43, 15, 26, 0, ORG);
     clipTo(p, body);
-    int q = ell(36, -48, 17, 30, 0, ORG);
+    int q = ell(38, -49, 18, 30, 0, ORG);
     clipTo(q, body);
+    for (int k = 0; k < 3; k++) {
+      int s = cap(27, -62 + k * 11, 36, -65 + k * 11, 1.5f, STRIPE);
+      clipTo(s, body);
+      alpha(s, 190);
+    }
     int chest = ell(0, -68, 21, 30, 0, rgb(255, 254, 251));
     alpha(chest, 210);
     if (L.dirty) {
@@ -344,19 +401,19 @@ static void front(const Look &L) {
         fy = -9 + (-93 + 9) * L.groom;
       }
       int leg = cap(side * 11, -56, fx, fy, 8.2f, FUR);
-      out(leg, grooming ? LINE : SOFT, grooming ? 1.3f : 1.1f);
+      out(leg, grooming ? LINE : SOFT, grooming ? 1.2f : 1.1f);
       int paw = ell(fx + side * 1.5f, fy + 4, 10.5f, 6.5f, grooming ? side * 1.2f : 0, FUR);
       out(paw, grooming ? LINE : SOFT, 1.1f);
       for (int k = -1; k <= 1; k += 2) cap(fx + side * 1.5f + k * 3, fy + 6, fx + side * 1.5f + k * 3.5f, fy + 9.5f, 0.45f, SOFT);
     }
-  } else if (loaf && !L.inBox) {
+  } else if (loaf && !L.inBox) {               // only the tips of the tucked paws show
     for (int side = -1; side <= 1; side += 2) {
-      int paw = ell(side * 11, -4, 9, 5.5f, 0, FUR);
+      int paw = ell(side * 13, -3, 10, 5, 0, FUR);
       out(paw, SOFT, 1.1f);
     }
   }
   if (!L.inBox) tailCurve(tp, 16, 13, 16, 7.5f, 5.5f, L.tailPuff, 5);   // the tip curls over a paw
-  accessoryNeck(L.acc, loaf ? -66 : -92);
+  accessoryNeck(L.acc, loaf ? -48 : -92);
 
   // cardboard box in front, paws on the rim
   if (L.inBox) {
@@ -379,19 +436,83 @@ static void front(const Look &L) {
   Xf base = X;
   X = X.shift(0, headDrop).rotAbout(0, -90, L.tilt);
   headFront(L);
-  // touch areas
-  X.apply(0, -122, hit.hx, hit.hy);
-  hit.hr = 40 * L.s;
-  X.apply(0, -103, hit.nx, hit.ny);
-  X.apply(-15.5f, -116, hit.ex[0], hit.ey[0]);
-  X.apply(15.5f, -116, hit.ex[1], hit.ey[1]);
-  X.apply(0, -90, hit.cx, hit.cy);
-  X.apply(0, -175, hit.hx, hit.top);
-  X.apply(0, -122, hit.hx, hit.hy);
+  headHits(L.s);
   X = base;
-  X.apply(0, loaf ? -30 : -52, hit.bx, hit.by);
-  hit.brx = (loaf ? 42 : 36) * L.s;
-  hit.bry = (loaf ? 30 : 48) * L.s;
+  X.apply(0, loaf ? -27 : -52, hit.bx, hit.by);
+  hit.brx = (loaf ? 50 : 36) * L.s;
+  hit.bry = (loaf ? 28 : 48) * L.s;
+  tailPoints(tp);
+}
+
+// ---------- FLOP: flat on her side, head up, legs out (her favourite) ----------
+static void flop(const Look &L) {
+  float shake = sinf(L.t * 70) * L.purr * 0.6f;
+  X.set(L.x + shake, L.y, L.s, L.flip);
+  float br = sinf(L.breath);
+  int sh = ell(0, -1, 70, 7, 0, BLACK);
+  alpha(sh, 45);
+
+  // tail lies on the floor behind her; the tip flicks
+  float flick = sinf(L.t * 2.1f) * 5 * L.tailSwing;
+  float tp[8] = {-50, -24, -80, -36, -108, -24, -100, -7 - fabsf(flick)};
+  tailCurve(tp, 14, 0, 14, 7, 5, L.tailPuff, 3);
+
+  // far legs
+  int fh = cap(-34, -12, -54, -7, 7, FUR_FAR);
+  out(fh, SOFT, 1);
+  ell(-59, -6, 8, 5, 0, FUR_FAR);
+  int ff = cap(34, -13, 60, -7, 6.5f, FUR_FAR);
+  out(ff, SOFT, 1);
+  ell(64, -6, 8, 5, 0, FUR_FAR);
+
+  // body: belly towards you
+  int body = ell(-2, -22 - br * 0.6f, 53, 22 + br * 0.8f, 0, FUR);
+  grad(body, FUR_SH);
+  out(body, LINE, 1.2f);
+  group(body, 1);
+  int haunch = ell(-35, -23, 25, 22, 0, FUR);
+  grad(haunch, FUR_SH);
+  out(haunch, LINE, 1.2f);
+  group(haunch, 1);
+  int chest = ell(30, -23, 22, 21, 0, FUR);
+  out(chest, LINE, 1.2f);
+  group(chest, 1);
+  int saddle = ell(-8, -39, 52, 14, 0.04f, ORG);
+  grad(saddle, ORG_L);
+  clipTo(saddle, body);
+  stripes(-40, -45, 12, 6, 12, 3, body, 1.7f);
+  int hip = ell(-44, -32, 17, 15, 0, ORG);
+  clipTo(hip, haunch);
+  stripes(-54, -40, 8, 3, 11, 2, haunch);
+  if (L.dirty) {
+    int d = ell(4, -18, 2.4f, 1.8f, 0, rgb(140, 118, 96));
+    alpha(d, 150);
+  }
+
+  // near hind leg, with the orange patch and the sole of the paw
+  int nh = cap(-38, -9, -64, -4, 8, FUR);
+  out(nh, SOFT, 1.1f);
+  int hock = ell(-51, -7, 10, 6, -0.2f, ORG);
+  clipTo(hock, nh);
+  int hp = ell(-70, -4, 8, 6.5f, 0, FUR);
+  out(hp, SOFT, 1);
+  beans(-70.5f, -4.5f, 1);
+  // near front leg
+  int nf = cap(26, -9, 52, -3, 7.2f, FUR);
+  out(nf, SOFT, 1.1f);
+  int fp = ell(57, -3, 9, 5.5f, 0, FUR);
+  out(fp, SOFT, 1);
+  for (int k = -1; k <= 1; k += 2) cap(58 + k * 3, -2, 59 + k * 3.5f, 1.5f, 0.45f, SOFT);
+
+  // head, raised and turned to you
+  Xf base = X;
+  X = X.shift(40, 76).rotAbout(0, -100, -0.14f + L.tilt);
+  headFront(L);
+  headHits(L.s);
+  X = base;
+  X.apply(-4, -22, hit.bx, hit.by);
+  hit.brx = 54 * L.s;
+  hit.bry = 22 * L.s;
   tailPoints(tp);
 }
 
@@ -452,26 +573,29 @@ static void side(const Look &L) {
 
   // body
   float tilt = st * -0.12f;
-  int body = ell(0, by, 46 + st * 8, 21 - 3 * c - st * 3, tilt, FUR);
+  int body = ell(0, by, 46 + st * 8, 22 - 3 * c - st * 3, tilt, FUR);
   grad(body, FUR_SH);
-  out(body, LINE, 1.3f);
+  out(body, LINE, 1.2f);
   group(body, 1);
   int chest = ell(28, by - 3, 19, 19, 0, FUR);
-  out(chest, LINE, 1.3f);
+  out(chest, LINE, 1.2f);
   group(chest, 1);
   int haunch = ell(rearX - 4, by + 4, 18, 20 - 3 * c, 0, FUR);
   grad(haunch, FUR_SH);
-  out(haunch, LINE, 1.3f);
+  out(haunch, LINE, 1.2f);
   group(haunch, 1);
   int saddle = ell(-8, by - 17, 41, 14, tilt, ORG);
   grad(saddle, ORG_L);
   clipTo(saddle, body);
+  stripes(-34, by - 24, 11, 6, 11, 3, body);
   int hip = ell(rearX - 8, by - 4, 14, 16, 0, ORG);
   clipTo(hip, haunch);
 
   // near legs
   int l1 = cap(rearX, by + 6, nbx, nby - 4, 7.6f, FUR);
   out(l1, SOFT, 1.1f);
+  int hock = ell((rearX + nbx) * 0.5f - 1, (by + 6 + nby - 4) * 0.5f, 7, 8, 0, ORG);
+  clipTo(hock, l1);
   int p1 = ell(nbx + 2, nby - 2, 9, 5, 0, FUR);
   out(p1, SOFT, 1);
   int l2 = cap(27, by + 4, nfx, nfy - 4, 6.9f, FUR);
@@ -512,10 +636,10 @@ static void side(const Look &L) {
     alpha(in, 230);
     X = save;
     int head = ell(0, 0, 23, 20, 0, FUR);
-    out(head, LINE, 1.3f);
+    out(head, LINE, 1.2f);
     group(head, 2);
     int muz = ell(15, 6, 12, 9, 0, FUR);
-    out(muz, LINE, 1.3f);
+    out(muz, LINE, 1.2f);
     group(muz, 2);
     int cap1 = ell(-8, -11, 21, 14, 0.3f, ORG);
     grad(cap1, ORG_L);
@@ -524,8 +648,8 @@ static void side(const Look &L) {
     clipTo(ep, head);
     Look e = L;
     e.lookX = 0.6f + L.lookX * 0.4f;
-    eye(e, 11, -4, 6.2f, 6.4f, -0.12f, L.pupil, 0.5f);
-    eye(e, 23, -5, 3, 5.4f, 0, L.pupil * 0.7f, 0.2f);
+    eye(e, 11, -4, 6.0f, 6.0f, -0.15f, L.pupil, 0.5f);
+    eye(e, 23, -5, 2.8f, 5.0f, 0, L.pupil * 0.7f, 0.2f);
     int nose = tri(23.5f, 3, 28.5f, 3, 27, 7.5f, NOSE);
     out(nose, NOSE_D, 0.7f);
     if (L.mouth == M_MEOW || L.mouth == M_HISS || L.mouth == M_YAWN) {
@@ -572,11 +696,12 @@ static void curl(const Look &L) {
   alpha(sh, 45);
   int body = ell(4, -24 - br, 46, 24 + br * 1.3f, 0, FUR);
   grad(body, FUR_SH);
-  out(body, LINE, 1.3f);
+  out(body, LINE, 1.2f);
   group(body, 1);
   int p = ell(10, -44, 46, 17, 0, ORG);
   grad(p, ORG_L);
   clipTo(p, body);
+  stripes(-18, -48, 11, 6, 12, 3, body);
   int q = ell(38, -28, 14, 18, 0, ORG);
   clipTo(q, body);
   float tp[8] = {44, -10, 54, 6, 0, 9, -44 + sinf(L.t * 0.7f) * 3, -3};
@@ -594,7 +719,7 @@ static void curl(const Look &L) {
   group(e2, 2);
   tri(-14, -12, -8, -15, -18, -27, PINK);
   int head = ell(0, 0, 22, 18, 0, FUR);
-  out(head, LINE, 1.3f);
+  out(head, LINE, 1.2f);
   group(head, 2);
   for (int s2 = -1; s2 <= 1; s2 += 2) {
     int pc = ell(s2 * 14, -8, 15, 13, s2 * -0.3f, ORG);
@@ -622,6 +747,8 @@ static void curl(const Look &L) {
   hit.bry = 26 * L.s;
   hit.cx = hit.hx;
   hit.cy = hit.hy;
+  hit.ex[0] = hit.ex[1] = hit.hx;
+  hit.ey[0] = hit.ey[1] = hit.hy;
   tailPoints(tp);
 }
 
@@ -630,6 +757,7 @@ static void draw(uint16_t *fb, const Look &L) {
   switch (L.pose) {
     case WALK: case RUN: case CROUCH: case POUNCE: case BAT: case EAT: side(L); break;
     case CURL: curl(L); break;
+    case FLOP: flop(L); break;
     default: front(L);
   }
   cg::render(fb);

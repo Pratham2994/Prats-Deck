@@ -98,7 +98,7 @@ static void listView(uint16_t *fb) {
 static void pageView(uint16_t *fb) {
   const Page &p = PAGES[page];
   appHeader(fb, p.name, p.col);
-  char s[12];
+  char s[24];
   snprintf(s, sizeof(s), "%d / %d", page + 1, NPAGES);
   tiny(fb, s, W - 8 - tinyWidth(s), 8, MUTED);
 
