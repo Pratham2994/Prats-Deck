@@ -9,12 +9,16 @@ Run:
 
 Close the Arduino Serial Monitor first: only one program can open the port.
 GPU usage and temperature come from nvidia-smi when an NVIDIA GPU is present.
+On Windows, the song that plays on the PC is sent too. The Macros app shows it.
 """
 
+import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
+import unicodedata
 
 try:
     import psutil
@@ -61,8 +65,97 @@ def cpu_temp():
     return -1
 
 
+# Windows PowerShell script: once a second, print "state<TAB>title<TAB>artist" of the song that
+# Windows shows on its media controls. state: 0 = nothing, 1 = playing, 2 = paused.
+# It needs no extra Python package. It stops by itself when this program is gone: it looks
+# for the process number PARENT, which is put in before the script starts.
+SONG_SCRIPT = r"""
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+Add-Type -AssemblyName System.Runtime.WindowsRuntime
+$asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
+    $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and
+    $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
+function Await($op, $type) {
+    $t = $asTask.MakeGenericMethod($type).Invoke($null, @($op))
+    $t.Wait(-1) | Out-Null
+    $t.Result
+}
+$mgrType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime]
+$propType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties, Windows.Media.Control, ContentType = WindowsRuntime]
+$mgr = Await ($mgrType::RequestAsync()) $mgrType
+while (Get-Process -Id PARENT -ErrorAction SilentlyContinue) {
+    $line = "0`t`t"
+    try {
+        $s = $mgr.GetCurrentSession()
+        if ($s) {
+            $p = Await ($s.TryGetMediaPropertiesAsync()) $propType
+            $state = if ([int]$s.GetPlaybackInfo().PlaybackStatus -eq 4) { 1 } else { 2 }
+            $line = "$state`t$($p.Title)`t$($p.Artist)"
+        }
+    } catch { }
+    [Console]::Out.WriteLine($line)
+    [Console]::Out.Flush()
+    Start-Sleep -Milliseconds 1000
+}
+"""
+
+
+def plain(text, limit):
+    """Text the deck can show: its fonts have the ASCII letters only."""
+    text = unicodedata.normalize("NFKD", text)
+    out = "".join(c if " " <= c <= "~" else ("" if unicodedata.combining(c) else "?") for c in text)
+    out = " ".join(out.split())
+    if out and not any(c.isalnum() for c in out):
+        return "(title in another script)"
+    return out[:limit]
+
+
+def song_line(raw):
+    """'state<TAB>title<TAB>artist' from the helper -> the line for the deck."""
+    parts = (raw.split("\t") + ["", ""])[:3]
+    state = parts[0] if parts[0] in ("1", "2") else "0"
+    title = plain(parts[1], 55)
+    if not title:
+        state = "0"
+    return "NP %s %s\t%s\n" % (state, title, plain(parts[2], 35))
+
+
+class Song:
+    """Follows the song on the PC with a small PowerShell helper (Windows only)."""
+
+    def __init__(self):
+        self.raw = "0\t\t"
+        self.proc = None
+        if sys.platform != "win32" or not shutil.which("powershell"):
+            return
+        try:
+            self.proc = subprocess.Popen(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+                 SONG_SCRIPT.replace("PARENT", str(os.getpid()))],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            threading.Thread(target=self._read, daemon=True).start()
+        except OSError:
+            self.proc = None
+
+    def _read(self):
+        for line in self.proc.stdout:
+            self.raw = line.decode("utf-8", "replace").rstrip("\r\n")
+        self.raw = "0\t\t"                    # the helper ended: no song to show
+
+    def line(self):
+        return song_line(self.raw)
+
+    def close(self):
+        if self.proc:
+            self.proc.terminate()
+
+
 def main():
     port = sys.argv[1] if len(sys.argv) > 1 else None
+    song = Song()
+    song_sent, song_at = None, 0.0
     psutil.cpu_percent()  # first call primes the counter
     last_net = psutil.net_io_counters()
     last_t = time.time()
@@ -93,6 +186,10 @@ def main():
                 psutil.cpu_percent(), mem.percent, gpu, cpu_temp(), gpu_t,
                 down, up, mem.used / 2**30, mem.total / 2**30)
             link.write(line.encode())
+            np = song.line()
+            if np != song_sent or now - song_at >= 5:      # on a change, and again every 5 s
+                link.write(np.encode())
+                song_sent, song_at = np, now
             if stalled:
                 print("Pico is reading again")
                 stalled = False
@@ -109,9 +206,11 @@ def main():
             if link:
                 link.close()
             link = None
+            song_sent = None
             time.sleep(2)
         except KeyboardInterrupt:
             break
+    song.close()
 
 
 if __name__ == "__main__":

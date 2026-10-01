@@ -1,10 +1,12 @@
 // app_macro.h
 // Macro pad: the Pico acts as a USB keyboard. Each button sends a media key or a shortcut.
 // No PC software needed. Shortcuts are for Windows.
+// While pc_monitor.py runs on the PC, a strip under the keys shows the song that plays there.
 #pragma once
 
 #include <Keyboard.h>
 #include "core.h"
+#include "app_pcstats.h"
 
 namespace macro {
 
@@ -40,6 +42,7 @@ static const Key KEYS[12] = {
 
 static const int COLS = 4, ROWS = 3;
 static const int KX = 4, KY = 28, KW = 78, KH = 68;   // grid origin and cell size
+static const int NP_H = 34;                           // height of the song strip
 static uint32_t flashUntil[12];
 static int held = -1;
 static uint32_t nextRepeat = 0;
@@ -105,11 +108,41 @@ static void enter() {
   held = -1;
 }
 
+// copy s into out, cut with "..." so that it is not wider than maxW
+static void fitText(char *out, int n, const char *s, const Font *f, int maxW) {
+  strlcpy(out, s, n);
+  int len = strlen(out);
+  while (len > 3 && textWidth(f, out) > maxW) {
+    out[--len] = 0;
+    for (int k = 1; k <= 3; k++) out[len - k] = '.';
+  }
+}
+
+// the song strip: little moving bars while it plays, two still bars when paused
+static void songStrip(uint16_t *fb, int y, int state, uint32_t now) {
+  const uint16_t col = rgb(255, 120, 220);
+  fillRoundRect(fb, 6, y, W - 12, NP_H, 10, blend(CARD, col, 22));
+  roundRect(fb, 6, y, W - 12, NP_H, 10, blend(CARD_EDGE, col, 70));
+  for (int k = 0; k < 4; k++) {
+    int h = state == 1 ? 5 + (int)(7 + 7 * sinf(now / 130.0f + k * 1.9f)) : (k == 1 || k == 2 ? 14 : 0);
+    if (h) fillRoundRect(fb, 16 + k * 5, y + NP_H / 2 + 9 - h, 3, h, 1, col);
+  }
+  char s[sizeof(pcstats::S.npTitle)];
+  fitText(s, sizeof(s), pcstats::S.npTitle, SMALL, W - 60);
+  text(fb, SMALL, s, 42, y + 15, INK);
+  fitText(s, sizeof(s), pcstats::S.npArtist[0] ? pcstats::S.npArtist : (state == 1 ? "playing" : "paused"), TINY, W - 60);
+  tiny(fb, s, 42, y + 20, MUTED);
+}
+
 static void frame(uint16_t *fb, float dt, uint32_t now) {
+  // with a song to show, the keys are a little lower and the strip goes under them
+  const int np = pcstats::song(now);
+  const int kh = np ? (H - KY - NP_H - 4) / ROWS : KH;
+
   // which key is under the finger
   int under = -1;
   if (T.down && !inHomeCorner(T.startX, T.startY)) {
-    int c = ((int)T.x - KX) / KW, r = ((int)T.y - KY) / KH;
+    int c = ((int)T.x - KX) / KW, r = ((int)T.y - KY) / kh;
     if (T.x >= KX && T.y >= KY && c < COLS && r < ROWS) under = r * COLS + c;
   }
   if (T.pressed && under >= 0) {               // fire on press: feels instant
@@ -117,7 +150,7 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
     send(KEYS[under]);
     flashUntil[under] = now + 180;
     nextRepeat = now + 400;
-    int cx = KX + (under % COLS) * KW + KW / 2, cy = KY + (under / COLS) * KH + KH / 2;
+    int cx = KX + (under % COLS) * KW + KW / 2, cy = KY + (under / COLS) * kh + kh / 2;
     sparkBurst(cx, cy, 40, 260, 0.6f, 60 * 256);
   }
   if (!T.down) held = -1;
@@ -140,20 +173,21 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
 
   for (int i = 0; i < 12; i++) {
     const Key &k = KEYS[i];
-    int x = KX + (i % COLS) * KW + 2, y = KY + (i / COLS) * KH + 2, w = KW - 4, h = KH - 4;
+    int x = KX + (i % COLS) * KW + 2, y = KY + (i / COLS) * kh + 2, w = KW - 4, h = kh - 4;
     uint16_t col = i < 6 ? rgb(255, 120, 220) : rgb(120, 200, 255);
     bool lit = (int32_t)(flashUntil[i] - now) > 0 || (held == i && under == i);
     fillRoundRect(fb, x, y, w, h, 10, lit ? dim(col) : blend(CARD, col, 22));
     roundRect(fb, x, y, w, h, 10, lit ? col : blend(CARD_EDGE, col, 70));
     uint16_t fg = lit ? WHITE : col;
     if (k.icon != IC_TEXT) {
-      drawIcon(fb, k.icon, x + w / 2, y + 22, fg);
-      textCenter(fb, SMALL, k.label, x + w / 2, y + 50, fg);
+      drawIcon(fb, k.icon, x + w / 2, y + h * 22 / 64, fg);
+      textCenter(fb, SMALL, k.label, x + w / 2, y + h - 14, fg);
     } else {
-      textCenter(fb, MEDIUM, k.label, x + w / 2, y + 32, fg);
-      tinyCenter(fb, k.hint, x + w / 2, y + 44, lit ? WHITE : LIGHTGREY);
+      textCenter(fb, MEDIUM, k.label, x + w / 2, y + h / 2, fg);
+      tinyCenter(fb, k.hint, x + w / 2, y + h / 2 + 12, lit ? WHITE : LIGHTGREY);
     }
   }
+  if (np) songStrip(fb, KY + ROWS * kh + 2, np, now);
 }
 
 static void leave() { Keyboard.releaseAll(); }

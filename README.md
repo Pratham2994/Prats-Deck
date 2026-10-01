@@ -26,7 +26,7 @@ No extra libraries are needed.
 |---|---|---|
 | Chindi | Your pet cat. She gets hungry, sleepy and bored, and she wants attention. | See the Chindi section. |
 | Galaxy | A galaxy of glowing dots that follow the stylus. Only for fun. | Hold: the dots circle the stylus. Drag: they follow. Flick: they fly away. Tap the top-right corner for new colours. |
-| Macros | Buttons that control your PC. The deck works as a USB keyboard, so the PC needs no software. | Top buttons: music and volume. Bottom buttons: Windows shortcuts (Copy, Paste, Lock, and more). Hold Vol + or Vol - to repeat. |
+| Macros | Buttons that control your PC. The deck works as a USB keyboard, so the PC needs no software. | Top buttons: music and volume. Bottom buttons: Windows shortcuts (Copy, Paste, Lock, and more). Hold Vol + or Vol - to repeat. While `pc_monitor.py` runs, a strip under the buttons shows the song that plays on the PC. |
 | Monitor | Shows how hard your PC works: processor (CPU), memory (RAM), graphics card (GPU), temperatures and network speed. | Run `python pc_monitor.py` on the PC and keep the USB cable connected. Tap the graph to change between CPU, RAM and GPU. |
 | Clock | A clock set from the internet, with the weather for today and 2 more days. | Needs Wi-Fi in `config.h`. Tap the weather panel to refresh it. |
 | Wi-Fi | Finds the Wi-Fi networks near you and shows how strong each one is. | List: all networks, the strongest first. Chart: which channels are crowded. The bottom line gives the best channel for your own router. |
@@ -95,7 +95,7 @@ pip install psutil pyserial
 python pc_monitor.py
 ```
 
-The script finds the Pico by itself, on any COM port. Close the Arduino Serial Monitor first, because only one program can use the port. GPU data needs an NVIDIA card. On Windows, the CPU temperature shows `--`, because psutil cannot read it there.
+The script finds the Pico by itself, on any COM port. On Windows it also sends the song that plays on the PC (title and artist, from the Windows media controls), and the Macros app shows it. Letters that are not in the deck's fonts show as `?`. Close the Arduino Serial Monitor first, because only one program can use the port. GPU data needs an NVIDIA card. On Windows, the CPU temperature shows `--`, because psutil cannot read it there.
 
 ## Files
 

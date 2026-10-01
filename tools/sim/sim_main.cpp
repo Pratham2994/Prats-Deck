@@ -143,6 +143,21 @@ int main() {
   up();
   step(8);
   printf("keys sent: %d (want 1)\n", Keyboard.sent);
+  // the PC says which song plays: the strip shows under the keys, and a key still works
+  Serial.in += "NP 1 Bohemian Rhapsody - Remastered 2011 (Live at the Rainbow)\tQueen\n";
+  step(10);
+  shot("06a_macro_song");
+  printf("song state: %d (want 1), title: %s\n", pcstats::song(millis()), pcstats::S.npTitle);
+  down(4 + 2 * 78 + 39, 28 + 2 * 57 + 28);       // Undo, in the lower layout
+  step(3);
+  up();
+  step(8);
+  printf("keys sent: %d (want 2)\n", Keyboard.sent);
+  Serial.in += "NP 2 Song with no artist\t\n";
+  step(10);
+  shot("06b_macro_paused");
+  step(600);                                     // 13 s with no news: the strip goes away
+  printf("song state after silence: %d (want 0)\n", pcstats::song(millis()));
   goHome();
 
   tileTap(3);
@@ -185,6 +200,9 @@ int main() {
   tap(240, 150);                               // Scope
   step(10);
   shot("16_guide_page");
+  guide::page = 3;                               // Macros: the page with the most text
+  step(5);
+  shot("16a_guide_macros");
   goHome();
 
   tileTap(11);

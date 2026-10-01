@@ -2,6 +2,7 @@
 // Live PC stats from pc_monitor.py over USB: CPU, RAM, GPU gauges, history graph,
 // temperatures and network. Shows the Pico's own stats while no PC data arrives.
 // Tap the graph to switch between CPU, RAM and GPU history.
+// pc_monitor.py also sends the song that plays on the PC. The Macros app shows it.
 #pragma once
 
 #include "core.h"
@@ -10,6 +11,8 @@ namespace pcstats {
 
 // one line per second from the PC:
 // "PC cpu% ram% gpu% cpuTemp gpuTemp downKBs upKBs ramUsedGB ramTotalGB\n" (-1 = unknown)
+// and, when the song changes and every few seconds:
+// "NP state title<TAB>artist\n"   state: 0 = nothing, 1 = playing, 2 = paused
 enum { F_CPU_P, F_RAM, F_GPU, F_CPUT, F_GPUT, F_DOWN, F_UP, F_RAMU, F_RAMT, NF };
 static const int HISTN = 150;
 
@@ -24,6 +27,9 @@ struct State {
   int graph;                 // which history the graph shows
   float picoTemp;
   uint32_t lastPico;
+  char npTitle[56], npArtist[36];   // the song on the PC
+  uint8_t npState;
+  uint32_t npAt;                    // when the last NP line came
 };
 // Not in appMem: the USB data is read in every app (see poll), so the PC's writes never
 // block, and the history keeps filling while another app is open.
@@ -32,7 +38,25 @@ static State S;
 static const char *const NAMES[3] = {"CPU", "RAM", "GPU"};
 static const uint16_t COLS[3] = {rgb(60, 200, 255), rgb(255, 90, 200), rgb(110, 255, 120)};
 
+static void parseSong(char *p) {
+  S.npState = (uint8_t)constrain(atoi(p), 0, 2);
+  while (*p && *p != ' ') p++;
+  if (*p == ' ') p++;
+  char *tab = strchr(p, '\t');
+  if (tab) *tab = 0;
+  strlcpy(S.npTitle, p, sizeof(S.npTitle));
+  strlcpy(S.npArtist, tab ? tab + 1 : "", sizeof(S.npArtist));
+  S.npAt = millis();
+}
+
+// The song on the PC now: 1 = playing, 2 = paused, 0 = none (or the PC went quiet).
+static int song(uint32_t now) {
+  if (!S.npAt || (int32_t)(now - S.npAt) > 12000 || !S.npTitle[0]) return 0;
+  return S.npState;
+}
+
 static void parse(char *s) {
+  if (strncmp(s, "NP ", 3) == 0) { parseSong(s + 3); return; }
   if (strncmp(s, "PC ", 3) != 0) return;
   char *p = s + 3;
   for (int i = 0; i < NF; i++) {

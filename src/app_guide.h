@@ -34,7 +34,8 @@ static const Page PAGES[] = {
    "Buttons that control your PC. The deck works as a USB keyboard.",
    "Top buttons: music and volume.\n"
    "Bottom buttons: Windows shortcuts, such as Copy, Paste and Lock.\n"
-   "Hold Vol + or Vol - to repeat."},
+   "Hold Vol + or Vol - to repeat.\n"
+   "With pc_monitor.py on the PC, the song that plays shows here."},
   {"Monitor", rgb(60, 200, 255),
    "Shows how hard your PC works: processor, memory, graphics, heat, network.",
    "On the PC, run: python pc_monitor.py\n"
