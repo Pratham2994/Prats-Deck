@@ -8,8 +8,8 @@
 //   Life      : she wanders, grooms, kneads, loafs, stares at nothing, gets the zoomies,
 //               pushes the cup off the table, sits in boxes, naps in the sunbeam, watches
 //               the rain, lies on the warm laptop when your PC is busy, sleeps at night.
-//   Links     : real weather and time in the window, Focus sessions earn treats, the
-//               Monitor app warms the laptop, she peeks in on the home screen, and (if on)
+//   Links     : real weather and time in the window, the Monitor app warms the laptop,
+//               she peeks in on the home screen, and (if on)
 //               she sometimes walks on your keyboard and types on your PC.
 //   Progress  : bond levels unlock accessories, toys and rooms. Daily streaks, photos.
 #pragma once
@@ -19,7 +19,6 @@
 #include "net.h"
 #include "app_clock.h"
 #include "app_pcstats.h"
-#include "app_focus.h"
 #include "chindi_cat.h"
 #include "chindi_room.h"
 
@@ -381,7 +380,7 @@ static void icon(uint16_t *fb, uint8_t ic, int cx, int cy, uint16_t c) {
 
 // ---------- The world ----------
 static room::Env E;
-static bool pcBusy = false, focusWork = false;
+static bool pcBusy = false;
 static float worldT = 0;
 
 static void updateEnv() {
@@ -404,7 +403,6 @@ static void updateEnv() {
     }
   }
   pcBusy = pcstats::S.lastData && (int32_t)(millis() - pcstats::S.lastData) < 3000 && pcstats::S.v[0] > 55;
-  focusWork = focus::running && !focus::isBreak;
 }
 
 static int today() {
@@ -425,7 +423,7 @@ static uint8_t foodKind = 0;
 // ---------- Chindi ----------
 enum Act : uint8_t {
   IDLE, WANDER, LOAFING, GROOMING, KNEADING, STARING, ZOOMIES, CUPPUSH, BOXSIT, SUNBATHE, WINDOWWATCH,
-  LAPTOP, SLEEPING, EATING, WORKING, ANNOYED, SWAT, SNEEZE, KBWALK, YAWN, REFUSE, CELEBRATE, PLAY
+  LAPTOP, SLEEPING, EATING, ANNOYED, SWAT, SNEEZE, KBWALK, YAWN, REFUSE, CELEBRATE, PLAY
 };
 struct Cat {
   float x = 130, hop = 0, hopV = 0, base = room::CAT_Y;
@@ -511,12 +509,10 @@ static void touchDay() {
   saveNow();
 }
 
-// ---------- Background: needs, keyboard walk, Focus link ----------
+// ---------- Background: needs, keyboard walk ----------
 static uint32_t kbNext = 0, kbNextChar = 0, kbToastUntil = 0;
 static char kbText[16] = "";
 static uint8_t kbIdx = 0, kbLen = 0;
-static int lastSessions = -1;
-static bool lastFocusRunning = false, needBreak = false, pendingTreat = false, yawnPending = false;
 
 static void kbSchedule(uint32_t now, uint32_t inMs) { kbNext = now + inMs; }
 
@@ -567,21 +563,6 @@ static void tick(uint32_t now, float dt) {
     Keyboard.write((uint8_t)kbText[kbIdx++]);
     kbNextChar = now + random(90, 230);
   }
-
-  // Focus: a finished session earns a treat; skipping the break makes her yawn
-  if (lastSessions < 0) lastSessions = focus::sessions;
-  if (focus::sessions > lastSessions) {
-    lastSessions = focus::sessions;
-    P.treats++;
-    addXP(15);
-    pendingTreat = true;
-    needBreak = true;
-    saveNow();
-  }
-  if (focus::running && focus::isBreak) needBreak = false;
-  bool fr = focus::running && !focus::isBreak;
-  if (fr && !lastFocusRunning && needBreak) yawnPending = true;
-  lastFocusRunning = fr;
 
   if (dirty && now - lastSave > 5 * 60000UL) saveNow();
 }

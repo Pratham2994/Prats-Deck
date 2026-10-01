@@ -23,7 +23,6 @@ static float needIn = 15;
 static bool lateNight() { return E.timeKnown && (E.hour >= 22.5f || E.hour < 6); }
 
 static void chooseNext(uint32_t now) {
-  if (focusWork) { setAct(WORKING, 1e9f); return; }
   if (P.energy < 18 || (lateNight() && P.energy < 90)) { setAct(SLEEPING, 1e9f); return; }
   if (boxX < 0 && random(0, 100) < 7) {        // a box appears now and then
     boxX = random(0, 2) ? random(40, 110) : random(220, 280);
@@ -316,16 +315,6 @@ static void behave(float dt, uint32_t now) {
       }
       break;
     }
-    case WORKING:
-      if (!focusWork) { setAct(IDLE, 2); break; }
-      if (C.stage == 0) {
-        if (walkTo(104, 55, dt)) { C.stage = 1; C.t = 0; }
-      } else {
-        C.lookXT = 0.8f;
-        C.lookYT = -0.4f;
-        if (fmodf(C.t, 6) > 5.2f) C.eyeT = 0.05f;   // slow blink at you now and then
-      }
-      break;
     case ANNOYED:
       if (C.stage == 0) {
         C.mouth = M_HISS;
@@ -459,7 +448,7 @@ static void stroke(uint8_t reg, float dt) {
       }
     }
     if (C.act == SWAT) return;
-    if (!busyAct() && C.act != IDLE && C.act != LOAFING && C.act != WORKING && C.act != SUNBATHE) setAct(IDLE, 4);
+    if (!busyAct() && C.act != IDLE && C.act != LOAFING && C.act != SUNBATHE) setAct(IDLE, 4);
     if (C.act == IDLE) C.t = 0;
     if (mode == MD_BRUSH) {
       bump(P.clean, 10 * dt);
@@ -556,7 +545,7 @@ static void interact(float dt) {
 static void feed(uint8_t kind) {
   touchDay();
   if (kind == 2 && P.treats == 0) {
-    toast("No treats. Finish a Focus session!", rgb(255, 170, 60));
+    toast("No treats left. Win some in the games!", rgb(255, 170, 60));
     return;
   }
   if (P.hunger > 92) {
@@ -977,7 +966,7 @@ static void sheets(uint16_t *fb) {
     case SH_FEED: {
       set(0, "Kibble", "+30 food", IC_BOWL, rgb(255, 160, 70));
       set(1, "Fish", "+45 +love", IC_FISH, rgb(90, 180, 255));
-      snprintf(sub, sizeof(sub), P.treats ? "%d left" : "from Focus", P.treats);
+      snprintf(sub, sizeof(sub), P.treats ? "%d left" : "from games", P.treats);
       set(2, "Treat", sub, IC_TREAT, rgb(255, 200, 80), P.treats == 0);
       int h = tiles(fb, "Feed Chindi", t, 3, 3);
       if (h >= 0) { sheet = SH_NONE; feed(h); }
@@ -1270,16 +1259,6 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
     cupX = room::TABLE_X0 + 12;
   }
   if (boxX >= 0 && (int32_t)(now - boxUntil) >= 0 && !(C.act == BOXSIT)) boxX = -1;
-  if (pendingTreat && !busyAct() && C.act != SLEEPING) {
-    pendingTreat = false;
-    celebrate("treat earned!");
-    toast("Focus session done: +1 treat", rgb(255, 200, 80));
-  }
-  if (yawnPending && !busyAct() && C.act != SLEEPING) {
-    yawnPending = false;
-    setAct(YAWN, 2);
-    say("take a break...", IC_ZZZ, 2500);
-  }
 
   // per-frame expression defaults; behaviour then overrides them
   Look &L = C.L;
@@ -1324,7 +1303,7 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
     C.lookYT = constrain((T.y - hit.hy) / 80, -1.0f, 1.0f);
   } else if (mode == MD_NORMAL || mode == MD_BRUSH || mode == MD_PHOTO) {
     C.lookIn -= dt;
-    if (C.lookIn <= 0 && C.act != STARING && C.act != WINDOWWATCH && C.act != WORKING && C.act != ANNOYED) {
+    if (C.lookIn <= 0 && C.act != STARING && C.act != WINDOWWATCH && C.act != ANNOYED) {
       bool atYou = random(0, 100) < 45;
       C.lookXT = atYou ? 0 : frand(-0.9f, 0.9f);
       C.lookYT = atYou ? 0 : frand(-0.4f, 0.4f);
@@ -1370,7 +1349,7 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
   L.phase = C.phase;
   L.breath += dt * (C.pose == CURL ? 1.5f : 2.4f);
   L.acc = P.acc;
-  L.glasses = C.act == WORKING && C.stage >= 1;
+  L.glasses = false;
   L.dirty = P.clean < 30;
   if (C.act == BOXSIT && C.stage == 2) L.inBox = true;
 
@@ -1418,14 +1397,6 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
   darken(fb, lightK);
 
   // ---- UI ----
-  if (focusWork) {                               // co-working card on the wall
-    int secs = (int)ceilf(focus::left);
-    char s[24];
-    snprintf(s, sizeof(s), "%02d:%02d", secs / 60, secs % 60);
-    card(fb, 192, 76, 120, 40, rgb(255, 170, 40));
-    tiny(fb, "FOCUSING TOGETHER", 201, 82, rgb(255, 170, 40));
-    text(fb, MEDIUM, s, 214, 110, WHITE);
-  }
   if (mode == MD_PHOTO) {
     uint16_t c = WHITE;
     for (int s2 = 0; s2 < 4; s2++) {             // viewfinder corners

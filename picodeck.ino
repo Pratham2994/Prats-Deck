@@ -8,7 +8,6 @@
 //   Clock      internet clock + weather with a live weather background (needs Wi-Fi in config.h)
 //   Wi-Fi      scanner, channel chart, best channel for your router
 //   Scope      oscilloscope on GP26
-//   Focus      Pomodoro timer with a burning-fuse ring
 //   Paint      glow painting with kaleidoscope mirror
 //   Bricks     Breakout with explosions
 //   Life       Conway's Game of Life with glowing trails
@@ -31,7 +30,6 @@
 #include "src/app_clock.h"
 #include "src/app_wifiscan.h"
 #include "src/app_scope.h"
-#include "src/app_focus.h"
 #include "src/app_paint.h"
 #include "src/app_bricks.h"
 #include "src/app_life.h"
@@ -46,7 +44,6 @@ static const App APPS[] = {
   {"Clock", rgb(255, 210, 80), clockapp::icon, clockapp::enter, clockapp::frame, clockapp::leave},
   {"Wi-Fi", rgb(80, 255, 120), wifiscan::icon, wifiscan::enter, wifiscan::frame, wifiscan::leave},
   {"Scope", rgb(90, 255, 130), scope::icon, scope::enter, scope::frame, scope::leave},
-  {"Focus", rgb(255, 170, 40), focus::icon, focus::enter, focus::frame, focus::leave},
   {"Paint", rgb(255, 120, 220), paint::icon, paint::enter, paint::frame, paint::leave},
   {"Bricks", rgb(255, 150, 60), bricks::icon, bricks::enter, bricks::frame, bricks::leave},
   {"Life", rgb(140, 255, 120), life::icon, life::enter, life::frame, life::leave},
@@ -76,7 +73,7 @@ static void home(uint16_t *fb, float dt) {
   sparksUpdate(dt);
   glowRender(fb, pal[PAL_AURORA], dt, 0.5f, 8);
 
-  // status bar: name, then time and focus timer on the right
+  // status bar: name, then the time on the right
   text(fb, MEDIUM, "Pico Deck", 12, 25, WHITE);
   fillRoundRect(fb, 12, 29, 22, 2, 1, rgb(120, 230, 160));
   char s[32];
@@ -88,12 +85,6 @@ static void home(uint16_t *fb, float dt) {
     snprintf(s, sizeof(s), "%02d:%02d", tm.tm_hour, tm.tm_min);
     textRight(fb, SMALL, s, rx, 22, WHITE);
     rx -= textWidth(SMALL, s) + 8;
-  }
-  if (focus::running || focus::done) {
-    int secs = (int)ceilf(focus::left);
-    if (focus::done) snprintf(s, sizeof(s), "DONE");
-    else snprintf(s, sizeof(s), "%02d:%02d", secs / 60, secs % 60);
-    rx = pill(fb, rx, 8, s, focus::isBreak ? rgb(90, 200, 255) : rgb(255, 170, 40)) - 6;
   }
   uint16_t bc;
   const char *badge = chindi::homeBadge(bc);
@@ -166,7 +157,6 @@ void loop() {
   draw ^= 1;                                   // ...and draw the next one meanwhile
   uint16_t *fb = frame[draw];
 
-  focus::tick(now);
   chindi::tick(now, dt);                       // her needs change while the Pico is on
   pcstats::poll();                             // read PC data in every app, so the PC never waits
   if (cur < 0) home(fb, dt);
