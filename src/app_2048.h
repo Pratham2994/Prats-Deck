@@ -135,7 +135,7 @@ static void frame(uint16_t *fb, float dt, uint32_t /*now*/) {
       int x = BX + GAP + c * (TILE + GAP) - grow, y = BY + GAP + r * (TILE + GAP) - grow, s = TILE + 2 * grow;
       fillRoundRect(fb, x, y, s, s, 7, tileColor(p));
       if (!p) continue;
-      char t[8];
+      char t[12];
       snprintf(t, sizeof(t), "%lu", 1ul << p);
       const Font *f = p < 7 ? LARGE : p < 10 ? MEDIUM : SMALL;      // 3 and 4 digits need a smaller font
       textCenter(fb, f, t, x + s / 2, y + s / 2 + (f == LARGE ? 8 : f == MEDIUM ? 6 : 4), p < 3 ? WHITE : rgb(20, 22, 30));

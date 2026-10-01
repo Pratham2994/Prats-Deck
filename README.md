@@ -3,6 +3,19 @@
 Fifteen touch apps for the Waveshare Pico-ResTouch-LCD-2.8 on a Raspberry Pi Pico 2 W.
 A small desk companion: a pet cat, a clock with weather, PC controls, a PC monitor, tools and games.
 
+## Screens
+
+These pictures come from the simulator (`tools/sim`), which runs the real code on a PC.
+
+| | | |
+|---|---|---|
+| ![Home page](docs/screens/home.png) | ![Chindi in her living room](docs/screens/chindi.png) | ![Chindi dances](docs/screens/chindi-dancing.png) |
+| Home | Chindi | She dances to the music on your PC |
+| ![Zoomies mini-game](docs/screens/chindi-zoomies.png) | ![Macros with the song strip](docs/screens/macros-song.png) | ![PC monitor](docs/screens/monitor.png) |
+| Zoomies, one of her mini-games | Macros, with the song on the PC | Monitor |
+| ![Snake](docs/screens/snake.png) | ![2048](docs/screens/2048.png) | ![Trackpad](docs/screens/trackpad.png) |
+| Snake | 2048 | Trackpad |
+
 ## Set up
 
 1. Copy `config.example.h` to `config.h`. Put your Wi-Fi name and password in it. `config.h` is not stored in git, so your password stays on your PC.

@@ -297,6 +297,7 @@ int main() {
     }
     fails += check(picked, "with a song on the PC, she picks dancing by herself");
     forceAct(DANCING, 12);
+    toastUntil = 0;                            // a clean picture: no old toast over her
     float fun0 = P.fun = 40;
     music(110);
     shot("c23a_dancing");
