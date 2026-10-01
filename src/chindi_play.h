@@ -358,12 +358,12 @@ static void behave(float dt, uint32_t now) {
         C.tiltT = tx < C.x ? -0.1f : 0.1f;
         C.pupilT = 0.95f;
         C.swingT = 2;
-        float ph = fmodf(C.t, 3.2f);
-        if (ph > 2.2f && (birdX >= 0 || E.wet())) {          // chattering at the bird (or the rain)
-          C.mouth = sinf(C.t * 40) > 0 ? M_MEOW : M_CLOSED;
+        bool prey = birdX >= 0 || E.wet();                   // a bird, or the rain: she chatters at it
+        if (fmodf(C.t, 3.2f) > 2.2f) {
+          if (prey) C.mouth = sinf(C.t * 40) > 0 ? M_MEOW : M_CLOSED;
           if (C.stage == 1) {
             C.stage = 2;
-            say("ek ek ek", birdX >= 0 ? IC_BIRD : IC_NONE, 1400);
+            if (prey) say("ek ek ek", birdX >= 0 ? IC_BIRD : IC_NONE, 1400);
             if (birdX >= 0) discover(F_BIRD);
             grant(WI_WINDOW);
           }
@@ -995,7 +995,7 @@ static void feed(uint8_t kind) {
     toast("No treats left. Grant her wishes!", rgb(255, 170, 60));
     return;
   }
-  if (P.hunger > 92) {
+  if (P.hunger > 92 && !(kind == 1 && wishNow() == WI_FISH)) {
     setAct(REFUSE, 1.8f);
     say("not hungry", IC_FISH, 1800);
     return;

@@ -49,7 +49,7 @@ void dma_channel_configure(int, const dma_channel_config *c, volatile void *w, c
 void dma_channel_set_read_addr(int, const volatile void *r, bool) { lastRead = r; }
 void dma_channel_set_trans_count(int, uint, bool) { lastSent = (const uint16_t *)lastRead; }
 
-#include "../../picodeck.ino"
+#include "../../Prats-Deck.ino"
 
 static void step(int n = 1) {
   for (int i = 0; i < n; i++) {
