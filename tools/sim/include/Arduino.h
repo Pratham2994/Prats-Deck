@@ -116,7 +116,7 @@ struct MouseSim {
   bool held = false;
   void begin() {}
   void move(int dx, int dy, signed char w = 0) { x += dx; y += dy; wheel += w; }
-  void click(uint8_t b = MOUSE_LEFT) { (b == MOUSE_RIGHT ? rightClicks : clicks)++; }
+  void click(uint8_t b = MOUSE_LEFT) { (b == MOUSE_RIGHT ? rightClicks : clicks)++; held = false; }   // like the real one: all buttons go up
   void press(uint8_t = MOUSE_LEFT) { held = true; }
   void release(uint8_t = MOUSE_LEFT) { held = false; }
 };

@@ -288,9 +288,12 @@ int main() {
   up();
   step(8);
   printf("trackpad scroll: wheel %d (want under -5), clicks %d (want 1)\n", Mouse.wheel, Mouse.clicks);
-  tap(160, 222);                                 // Right
   tap(266, 222);                                 // Hold
+  tap(160, 222);                                 // Right: the hold stays
   printf("trackpad buttons: right clicks %d (want 1), held %d (want 1)\n", Mouse.rightClicks, Mouse.held);
+  tap(120, 120);                                 // a tap on the pad lets the hold go, with no click
+  printf("trackpad tap in a hold: held %d (want 0), clicks %d (want 1)\n", Mouse.held, Mouse.clicks);
+  tap(266, 222);                                 // Hold again, then leave the app
   goHome();
   printf("trackpad left: held %d (want 0)\n", Mouse.held);
   shot("22_home_end");

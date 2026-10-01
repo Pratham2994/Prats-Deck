@@ -5,7 +5,7 @@
 //   Tap             : left click
 //   Strip at right  : drag up or down there to scroll
 //   Bottom buttons  : Left click, Right click, and Hold (keeps the left button down, to drag
-//                     a window or to select text; tap Hold again to let go)
+//                     a window or to select text; tap Hold again, or click, to let go)
 #pragma once
 
 #include <Mouse.h>
@@ -24,6 +24,24 @@ static int clicks = 0;
 static void enter() {
   tracking = false;
   remX = remY = remW = 0;
+}
+
+static void setHold(bool on) {
+  holdOn = on;
+  if (on) Mouse.press(MOUSE_LEFT);
+  else Mouse.release(MOUSE_LEFT);
+}
+
+// A left click ends a hold: that is how you drop the thing you drag. A right click keeps it.
+// (Mouse.click lets all the buttons go, so the hold is taken again after it.)
+static void click(uint8_t button) {
+  if (holdOn && button == MOUSE_LEFT) {
+    setHold(false);
+    return;
+  }
+  Mouse.click(button);
+  if (holdOn) Mouse.press(MOUSE_LEFT);
+  clicks++;
 }
 
 static void frame(uint16_t *fb, float dt, uint32_t /*now*/) {
@@ -62,8 +80,7 @@ static void frame(uint16_t *fb, float dt, uint32_t /*now*/) {
     tracking = false;
   }
   if (T.tap && inPad && !inStrip) {
-    Mouse.click(MOUSE_LEFT);
-    clicks++;
+    click(MOUSE_LEFT);
     sparkBurst(T.startX, T.startY, 14, 150, 0.4f, 90 * 256);
   }
 
@@ -87,18 +104,13 @@ static void frame(uint16_t *fb, float dt, uint32_t /*now*/) {
 
   static const char *const LABELS[] = {"Left", "Right", "Hold"};
   int hit = toolbar(fb, LABELS, 3, ACCENT, holdOn ? 2 : -1);
-  if (hit == 0) { Mouse.click(MOUSE_LEFT); clicks++; }
-  if (hit == 1) { Mouse.click(MOUSE_RIGHT); clicks++; }
-  if (hit == 2) {
-    holdOn = !holdOn;
-    if (holdOn) Mouse.press(MOUSE_LEFT);
-    else Mouse.release(MOUSE_LEFT);
-  }
+  if (hit == 0) click(MOUSE_LEFT);
+  if (hit == 1) click(MOUSE_RIGHT);
+  if (hit == 2) setHold(!holdOn);
 }
 
 static void leave() {
-  if (holdOn) Mouse.release(MOUSE_LEFT);          // never leave a button down on the PC
-  holdOn = false;
+  if (holdOn) setHold(false);                     // never leave a button down on the PC
 }
 
 // a pad with a pointer arrow on it

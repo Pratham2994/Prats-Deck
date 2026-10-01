@@ -56,6 +56,8 @@ struct Save {
   Photo photos[NPHOTO];
 };
 static_assert(EE_PET + sizeof(Save) <= 1024, "Chindi's save data must fit in the 1 KB flash area");
+static_assert(sizeof(Save) == 268 && offsetof(Save, hiFish) == 48 && offsetof(Save, photos) == 76,
+              "the layout of the save data changed: saves made by older firmware would not load");
 static Save P;
 static bool began = false, dirty = false, open = false;
 static uint32_t lastSave = 0;
