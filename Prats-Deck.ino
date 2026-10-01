@@ -174,6 +174,9 @@ void setup() {
   getCal();
   randomSeed(rp2040.hwrand32());
   homeSince = millis();
+#ifdef DECK_PROF
+  openApp(DECK_PROF < -1 ? -1 : DECK_PROF);
+#endif
 }
 
 void loop() {
@@ -187,8 +190,14 @@ void loop() {
   lastUs = us;
 
   lcdWait();                                   // previous frame finished sending
+#ifdef DECK_PROF
+  uint32_t p1 = micros();
+#endif
   touchUpdate(now, dt);
   fb = lcdPresent(fb);                         // send the frame drawn last time, draw the next one meanwhile
+#ifdef DECK_PROF
+  uint32_t p2 = micros();
+#endif
 
   chindi::tick(now, dt);                       // her needs change while the Pico is on
   pcstats::poll();                             // read PC data in every app, so the PC never waits
@@ -199,6 +208,22 @@ void loop() {
   }
 
   frames++;
+#ifdef DECK_PROF
+  profAcc[P_WAIT] += p1 - us;
+  profAcc[P_PRESENT] += p2 - p1;
+  profAcc[P_APP] += micros() - p2;
+  if (now - fpsT >= 1000) {
+    static const char *const PN[P_COUNT] = {"wait", "present", "app", "logic", "room", "props", "cat", "fx", "stats", "msg", "dock"};
+    Serial.printf("PROF app=%d fps=%d sync=%d", cur, (int)(frames * 1000 / (now - fpsT)), lcdSync);
+    for (int i = 0; i < P_COUNT; i++) {
+      if (profAcc[i]) Serial.printf(" %s=%lu", PN[i], (unsigned long)(profAcc[i] / frames));
+      profAcc[i] = 0;
+    }
+    Serial.printf("\n");
+    static int profSec = 0;                    // DECK_PROF=-2: go through all the apps, 4 s each
+    if (DECK_PROF == -2 && ++profSec % 4 == 0) openApp(cur + 1 >= NAPPS ? -1 : cur + 1);
+  }
+#endif
   if (now - fpsT >= 1000) {
     fps = frames * 1000 / (now - fpsT);
     frames = 0;

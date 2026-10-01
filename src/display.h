@@ -33,6 +33,20 @@ static uint16_t frame[2][W * H];
 static int dmaCh;
 static bool sending = false;
 
+// ---------- Frame timing, for development ----------
+// Build with -DDECK_PROF=<app number> (-1 = home page). The deck then opens that app at
+// start-up and prints the average time of each stage of a frame (microseconds) on USB serial,
+// once a second. Without the flag, the marks compile to nothing.
+enum { P_WAIT, P_PRESENT, P_APP, P_LOGIC, P_ROOM, P_PROPS, P_CAT, P_FX, P_STATS, P_MSG, P_DOCK, P_COUNT };
+#ifdef DECK_PROF
+static uint32_t profAcc[P_COUNT], profT = 0;
+#define PROF_START() (profT = micros())
+#define PROF_MARK(i) do { uint32_t t_ = micros(); profAcc[i] += t_ - profT; profT = t_; } while (0)
+#else
+#define PROF_START() ((void)0)
+#define PROF_MARK(i) ((void)0)
+#endif
+
 static constexpr uint16_t rgb(int r, int g, int b) {
   // 16-bit SPI frames go out high byte first, which is what the ST7789 wants. No byte swap.
   return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);

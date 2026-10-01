@@ -73,12 +73,6 @@ struct Env {
   bool sunny() const { return (wx == W_CLEAR || wx == W_CLOUDY) && hour > 7.5f && hour < 17.5f; }
   bool night() const { return hour < 6 || hour >= 19.5f; }
   bool wet() const { return wx == W_RAIN || wx == W_SNOW || wx == W_STORM; }
-  float light() const {      // room brightness 0..1 from the time of day
-    if (hour >= 7 && hour < 18) return 1;
-    if (hour >= 5 && hour < 7) return 0.8f + 0.2f * (hour - 5) / 2;
-    if (hour >= 18 && hour < 20) return 1 - 0.2f * (hour - 18) / 2;
-    return 0.8f;               // night: dimmed a little. Half brightness is too dark on the real screen
-  }
   float sunX() const { return 300 - (hour - 8) / 9 * 250; }    // sunbeam on the floor
 };
 
@@ -319,7 +313,7 @@ static void fountain(uint16_t *fb, float t) {
   }
 }
 
-// its light shows in the dark: call after the room has been darkened
+// its light shows at night and with the lights off: call after the room has been dimmed
 static void fountainGlow(uint16_t *fb, float k) {
   if (k <= 0) return;
   for (int j = -34; j <= 22; j++)

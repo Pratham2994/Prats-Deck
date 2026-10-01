@@ -62,7 +62,10 @@ python ppm2png.py                                                               
 ## Status
 
 - Everything compiles with the real compiler. The simulator covers all features and its checks pass.
-- On the board (2026-10-02): the firmware starts and USB works. Chindi (living room, by day) ran at 5 frames a second with -Os. With the O2 pragma and quicker drawing code (colour fades, rings, lines, cat shapes) it runs at 26 to 30.
+- On the board (2026-10-02): the firmware starts and USB works. Chindi (living room, by day) ran at 5 frames a second with -Os. With the O2 pragma and quicker drawing code (colour fades, rings, lines, cat shapes) it runs at about 29. One frame is about 34 ms: the cat 16, the room 9, the props 3, the stats bar 2.5, the dock 2.
+- All the other apps and the home page run at 40 to 46 frames a second. 46 is the limit: one picture takes 20 ms to send.
+- Frame timing: add `--build-property "compiler.cpp.extra_flags=-DDECK_PROF=0"` to the arduino-cli build. The deck then opens that app (0 = Chindi, -1 = home, -2 = each app in turn) and prints the time of each stage on USB serial once a second. See `PROF_MARK` in `display.h`.
+- The Chindi room is never dimmed by the clock. Only her light switch and Sleep dim it, to 75%.
 - In that test the tear-free mode was off (`lcdSync` was 0). The cause was not examined: the screen gave no answer, or the switch in Settings is off.
 - **Not tested on the real board yet:** the tear-free mode (it needs the screen to answer on SPI; the picture direction in that mode comes from the ST7789 data sheet, not from a test), real Wi-Fi weather on the home page, the scope ADC, and Windows media keys.
 - If the picture is turned or mirrored with the tear-free mode on: switch it off in Settings (or set `TEAR_FREE = false` in `display.h`) and correct `lcdTurn`.

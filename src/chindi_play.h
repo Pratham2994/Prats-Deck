@@ -1237,17 +1237,11 @@ static void savePhoto() {
   saveNow();
 }
 
-// ---------- Darkness at night / lights off ----------
-static void darken(uint16_t *fb, float k) {
-  if (k > 0.97f) return;
-  uint16_t *p = fb, *end = fb + W * H;
-  if (k > 0.72f) {
-    for (; p < end; p++) *p = *p - dim4(*p);                       // 75%
-  } else if (k > 0.42f) {
-    for (; p < end; p++) *p = ((*p >> 1) & 0x7BEF) + 0x0002;       // 50%, a little blue
-  } else {
-    for (; p < end; p++) *p = ((*p >> 2) & 0x39E7) + 0x0003;       // 25%
-  }
+// ---------- Lights off ----------
+// The room is never dark by the clock: at night it stays at full brightness. Only her light
+// switch (or Sleep) dims it, and only to 75%, because half brightness is too dark on the screen.
+static void dimRoom(uint16_t *fb) {
+  for (uint16_t *p = fb, *end = fb + W * H; p < end; p++) *p = *p - dim4(*p);
 }
 
 // the things that stand in a room but are not part of its background picture
@@ -1260,12 +1254,43 @@ static void drawProps(int rm, const room::Env &e, bool cupOn, float cx, float sw
 }
 
 // ---------- UI: stats card, wish chip, dock, sheets ----------
+// The 5 stat rings have the same shape. How much of each pixel the ring covers, and the angle
+// of the pixel, are worked out once. After that a ring is a walk through two small tables,
+// with no square root and no arctangent.
+static const int RING_R0 = 9, RING_R1 = 12, RING_N = 2 * RING_R1 + 1;
+static uint8_t ringCov[RING_N * RING_N], ringAng[RING_N * RING_N];   // cover 0..255; angle 0..255 = one turn from the top
+static void ringTables() {
+  for (int y = -RING_R1, i = 0; y <= RING_R1; y++)
+    for (int x = -RING_R1; x <= RING_R1; x++, i++) {
+      float d = sqrtf((float)(x * x + y * y));
+      ringCov[i] = (uint8_t)(constrain(fminf(d - RING_R0, RING_R1 - d) + 0.5f, 0.0f, 1.0f) * 255);
+      float a = atan2f((float)x, (float)-y);
+      if (a < 0) a += 6.2831853f;
+      ringAng[i] = (uint8_t)min(255, (int)(a * (256 / 6.2831853f)));
+    }
+}
+
+// a grey ring, with the part from the top to v percent in a colour that goes c0 -> c1
+static void ring(uint16_t *fb, int cx, int cy, float v, uint16_t c0, uint16_t c1) {
+  if (!ringCov[RING_R1]) ringTables();             // the top pixel of the ring: 0 until the tables are made
+  if (cx < RING_R1 || cx >= W - RING_R1 || cy < RING_R1 || cy >= H - RING_R1) return;
+  const uint16_t base = rgb(40, 44, 62);
+  const int end = v > 1 ? (int)(v * 2.56f) : 0;    // the colour goes up to this angle
+  const uint8_t *cov = ringCov, *ang = ringAng;
+  for (int y = -RING_R1; y <= RING_R1; y++) {
+    uint16_t *p = fb + (cy + y) * W + cx - RING_R1;
+    for (int x = 0; x < RING_N; x++, cov++, ang++) {
+      if (*cov < 6) continue;
+      uint16_t c = *ang < end ? blend(c0, c1, *ang * 256 / end) : base;
+      p[x] = *cov >= 250 ? c : blend(p[x], c, *cov + 1);
+    }
+  }
+}
+
 static void statRing(uint16_t *fb, int cx, int cy, float v, int k, uint32_t now) {
-  const float TWO_PI_F = 6.2831853f;
   uint16_t col = STAT_COL[k];
   if (v < 25) col = blend(col, rgb(255, 60, 60), (int)(128 + 127 * sinf(now / 160.0f)));
-  arc(fb, cx, cy, 9, 12, 0, TWO_PI_F, rgb(40, 44, 62), rgb(40, 44, 62));
-  if (v > 1) arc(fb, cx, cy, 9, 12, 0, TWO_PI_F * v / 100, dim(col), col);
+  ring(fb, cx, cy, v, dim(col), col);
   switch (k) {
     case 0:                                    // food
       fillCircle(fb, cx - 1, cy, 3, col);
@@ -1693,7 +1718,6 @@ static void galleryFrame(uint16_t *fb) {
     L.eyeOpen = p.eye / 100.0f;
     L.t = 1;
     kitty::draw(fb, L);
-    darken(fb, e.light());
     // polaroid frame
     uint16_t paper = rgb(250, 248, 242);
     fillRect(fb, 0, 0, W, 8, paper);
@@ -1797,6 +1821,7 @@ static void leave() {
 }
 
 static void frame(uint16_t *fb, float dt, uint32_t now) {
+  PROF_START();
   worldT += dt;
   updateEnv();
   checkWishes();
@@ -1944,7 +1969,9 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
 
   // ---- draw the room ----
   const room::Def &d = R();
+  PROF_MARK(P_LOGIC);
   room::draw(fb, P.room, E, worldT);
+  PROF_MARK(P_ROOM);
   cg::begin();
   drawProps(P.room, E, cupState == CUP_ON, cupX, flowerSway);
   if (birdX >= 0) room::bird(birdX, birdY, false, worldT, birdFlying);
@@ -1966,7 +1993,9 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
   }
   cg::X.set(0, 0, 1, false);
   cg::render(fb);
+  PROF_MARK(P_PROPS);
   kitty::draw(fb, L);
+  PROF_MARK(P_CAT);
   cg::begin();
   if (cupState == CUP_FALLING) room::fallingCup(cupX, cupY, cupRot);
   if (mode == MD_YARN) room::yarn(yX, yY, yRot);
@@ -1991,10 +2020,9 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
     emit(PK_SPARK, giftX + frand(-8, 8), room::CAT_Y - 14 + frand(-8, 4), 0, -12, 0.7f, rgb(255, 230, 150));
   updateParts(dt);
   drawParts(fb);
-  float lightK = E.timeKnown ? E.light() : 1;
-  if (lightsOff) lightK *= 0.55f;
-  darken(fb, lightK);
-  if (P.room == room::LIVING) room::fountainGlow(fb, fminf((1 - lightK) * 3.6f, 1.1f));
+  if (lightsOff) dimRoom(fb);
+  if (P.room == room::LIVING) room::fountainGlow(fb, lightsOff ? 1.1f : (E.timeKnown && E.night() ? 0.72f : 0));
+  PROF_MARK(P_FX);
 
   // ---- UI ----
   if (mode == MD_PHOTO) {
@@ -2022,7 +2050,9 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
   }
   bool sheetWasOpen = sheet != SH_NONE;          // a sheet opened by this frame's tap draws next frame
   statsCard(fb, now);
+  PROF_MARK(P_STATS);
   messages(fb, now, mode == MD_NORMAL && !sheetWasOpen);
+  PROF_MARK(P_MSG);
   if (mode == MD_NORMAL) {
     if (sheetWasOpen) sheets(fb);
     else if (sheet == SH_NONE) dock(fb);
@@ -2030,6 +2060,7 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
     modeBar(fb, mode == MD_LASER ? "Laser pointer" : mode == MD_FEATHER ? "Feather wand" : mode == MD_YARN ? "Yarn ball" : "Brushing");
     if (mode == MD_BRUSH && T.down && !ui) icon(fb, IC_BRUSH, (int)T.x + 10, (int)T.y - 10, rgb(90, 200, 240));
   }
+  PROF_MARK(P_DOCK);
 }
 
 }  // namespace chindi
