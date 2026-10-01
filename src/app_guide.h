@@ -16,7 +16,7 @@ struct Page {
 
 static const Page PAGES[] = {
   {"Basics", rgb(120, 170, 255),
-   "Fourteen small apps on one touch screen. Use the stylus and press firmly.",
+   "Fifteen small apps on one touch screen. Use the stylus and press firmly.",
    "Tap an app to open it.\n"
    "To go home, hold the top-left corner for half a second.\n"
    "Taps land in the wrong place? Go to Settings, Touch calibration."},
@@ -75,6 +75,11 @@ static const Page PAGES[] = {
    "When it goes sideways, tap above or below its head to turn it.\n"
    "When it goes up or down, tap left or right of its head.\n"
    "Gold food is worth 5, but it goes away quickly."},
+  {"2048", rgb(240, 180, 70),
+   "A number game. Two tiles with the same number join into one with their sum.",
+   "Swipe on the board: all the tiles slide that way.\n"
+   "After each move a new tile comes.\n"
+   "Try to make the 2048 tile. The best score is saved."},
   {"Trackpad", rgb(120, 200, 255),
    "The screen is a mouse pad for your PC. The deck works as a USB mouse.",
    "Drag to move the pointer. Tap to click.\n"

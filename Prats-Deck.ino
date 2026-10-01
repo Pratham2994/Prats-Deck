@@ -1,5 +1,5 @@
 // Prats-Deck.ino
-// Prats Deck: 14 touch apps for the Waveshare Pico-ResTouch-LCD-2.8 on a Pico 2 W.
+// Prats Deck: 15 touch apps for the Waveshare Pico-ResTouch-LCD-2.8 on a Pico 2 W.
 //
 //   Chindi     virtual pet cat: feed, pet, play, mini-games, photos
 //   Galaxy     particle galaxy you swirl, drag and flick
@@ -13,6 +13,7 @@
 //   Bricks     Breakout with explosions
 //   Life       Conway's Game of Life with glowing trails
 //   Snake      the classic: tap beside the head to turn
+//   2048       slide the tiles, join the same numbers
 //   Trackpad   the screen is a mouse pad for your PC over USB
 //   Settings   brightness, touch calibration, tear-free screen, Chindi's keyboard walk
 //
@@ -43,6 +44,7 @@
 #include "src/app_bricks.h"
 #include "src/app_life.h"
 #include "src/app_snake.h"
+#include "src/app_2048.h"
 #include "src/app_trackpad.h"
 #include "src/app_chindi.h"
 #include "src/app_settings.h"
@@ -60,6 +62,7 @@ static const App APPS[] = {
   {"Bricks", rgb(255, 150, 60), bricks::icon, bricks::enter, bricks::frame, bricks::leave},
   {"Life", rgb(140, 255, 120), life::icon, life::enter, life::frame, life::leave},
   {"Snake", rgb(120, 230, 110), snake::icon, snake::enter, snake::frame, snake::leave},
+  {"2048", rgb(240, 180, 70), g2048::icon, g2048::enter, g2048::frame, g2048::leave},
   {"Trackpad", rgb(120, 200, 255), trackpad::icon, trackpad::enter, trackpad::frame, trackpad::leave},
   {"Settings", rgb(180, 180, 200), settings::icon, settings::enter, settings::frame, settings::leave},
 };

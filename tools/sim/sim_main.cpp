@@ -206,7 +206,7 @@ int main() {
   shot("16a_guide_macros");
   goHome();
 
-  tileTap(13);
+  tileTap(14);
   step(10);
   shot("17_settings");
   goHome();
@@ -273,6 +273,33 @@ int main() {
   goHome();
 
   tileTap(12);
+  step(20);
+  shot("21f_2048_start");
+  {
+    using namespace g2048;
+    auto swipe = [&](int dx, int dy) {            // a stroke of 60 px across the board
+      down(110, 130);
+      for (int k = 1; k <= 6; k++) { simX = 110 + dx * k * 10; simY = 130 + dy * k * 10; step(1); }
+      up();
+      step(8);
+    };
+    int tiles0 = 0, tiles1 = 0;
+    for (auto &row : cell) for (uint8_t v : row) tiles0 += v != 0;
+    static const int DIRS[4][2] = {{-1, 0}, {0, 1}, {1, 0}, {0, -1}};
+    for (int k = 0; k < 60 && !over; k++) swipe(DIRS[k % 4][0], DIRS[k % 4][1]);
+    for (auto &row : cell) for (uint8_t v : row) tiles1 += v != 0;
+    shot("21g_2048_play");
+    printf("2048: tiles at the start %d (want 2), score after 60 swipes %lu (want over 100), tiles now %d\n", tiles0, (unsigned long)score, tiles1);
+    uint32_t sc = score;
+    cell[0][0] = 10; cell[0][1] = 10;             // two 1024 tiles: one swipe makes 2048
+    swipe(-1, 0);
+    printf("2048: made the 2048 tile %d (want 1), score went up by %lu (want 2048 or more)\n", won, (unsigned long)(score - sc));
+    shot("21h_2048_won");
+  }
+  goHome();
+  printf("2048: best saved %lu (want over 2000)\n", (unsigned long)g2048::best);
+
+  tileTap(13);
   step(20);
   shot("21d_trackpad");
   down(80, 100);                                 // a drag to the right and down
