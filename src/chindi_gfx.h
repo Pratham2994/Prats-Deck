@@ -6,6 +6,7 @@
 #pragma once
 
 #include "core.h"
+#include "twocore.h"
 
 namespace cg {
 
@@ -276,7 +277,8 @@ static long simPixels = 0, simRows = 0;
 static int simPeak = 0;
 #endif
 
-static void raster(uint16_t *fb, const Shape &s, bool outline) {
+// draw the rows yLo .. yHi - 1 of a shape (or of its outline)
+static void raster(uint16_t *fb, const Shape &s, bool outline, int yLo, int yHi) {
   if (s.alpha == 0) return;                   // invisible: only used to clip others
   float g = outline ? s.ow : 0;
   const bool cl = s.clip >= 0;
@@ -285,7 +287,7 @@ static void raster(uint16_t *fb, const Shape &s, bool outline) {
   if (cl) prep(pc, SH[s.clip], 0);
   const bool fade = !outline && s.col2 != s.col && s.gy1 > s.gy0;
   const float fadeK = fade ? 256 / (s.gy1 - s.gy0) : 0;
-  int y0 = max(0, (int)floorf(topOf(s, g))), y1 = min(H - 1, (int)ceilf(bottomOf(s, g)));
+  int y0 = max(yLo, (int)floorf(topOf(s, g))), y1 = min(yHi - 1, (int)ceilf(bottomOf(s, g)));
   for (int py = y0; py <= y1; py++) {
     float l[2], r[2];
     bool ok[2];
@@ -349,13 +351,10 @@ static void raster(uint16_t *fb, const Shape &s, bool outline) {
   }
 }
 
-// Draw all shapes. Within a group, the outlines of all its shapes are drawn first, so the
-// group reads as one outlined silhouette. Other outlined shapes get their outline right
-// before their fill.
-static void render(uint16_t *fb) {
-#ifdef SIM_COUNT
-  if (nsh > simPeak) simPeak = nsh;
-#endif
+// Draw the rows yLo .. yHi - 1 of all shapes. Within a group, the outlines of all its shapes
+// are drawn first, so the group reads as one outlined silhouette. Other outlined shapes get
+// their outline right before their fill.
+static void renderRows(uint16_t *fb, int yLo, int yHi) {
   uint32_t done = 0;
   for (int i = 0; i < nsh; i++) {
     const Shape &s = SH[i];
@@ -364,12 +363,47 @@ static void render(uint16_t *fb) {
       if (!(done & bit)) {
         done |= bit;
         for (int j = i; j < nsh; j++)
-          if (SH[j].group == s.group && (SH[j].flags & F_OUTLINE)) raster(fb, SH[j], true);
+          if (SH[j].group == s.group && (SH[j].flags & F_OUTLINE)) raster(fb, SH[j], true, yLo, yHi);
       }
     } else if (s.flags & F_OUTLINE) {
-      raster(fb, s, true);
+      raster(fb, s, true, yLo, yHi);
     }
-    raster(fb, s, false);
+    raster(fb, s, false, yLo, yHi);
+  }
+}
+
+// Draw all shapes. The two processor cores share the work: one draws the rows above
+// splitRow, the other the rows from splitRow down. Each row belongs to one core only, and a
+// core draws its rows of all shapes in the list's order, so the picture is the same as from
+// one core. splitNudge moves the split by itself to where the two parts take the same time.
+static int splitRow = H;
+static float splitNudge = 0;
+static void renderHalf(void *fb, int part) {
+  if (part == 0) renderRows((uint16_t *)fb, 0, splitRow);
+  else renderRows((uint16_t *)fb, splitRow, H);
+}
+
+static void render(uint16_t *fb) {
+#ifdef SIM_COUNT
+  if (nsh > simPeak) simPeak = nsh;
+#endif
+  // put the split where the work is: at the mean height of the shapes, each one counted by
+  // its rows (twice with an outline)
+  float rows = 0, at = 0;
+  for (int i = 0; i < nsh; i++) {
+    const Shape &s = SH[i];
+    if (s.alpha == 0) continue;
+    float top = fmaxf(topOf(s, 0), 0), bottom = fminf(bottomOf(s, 0), H);
+    if (bottom <= top) continue;
+    float w = (bottom - top) * ((s.flags & F_OUTLINE) ? 2 : 1);
+    rows += w;
+    at += w * (top + bottom) * 0.5f;
+  }
+  if (rows < 60) {                            // too little to share: the hand-over costs more
+    renderRows(fb, 0, H);
+  } else {
+    splitRow = constrain((int)(at / rows + splitNudge), 1, H - 1);
+    splitNudge = evenShare(splitNudge, onBothCores(renderHalf, fb), -60, 60);
   }
   nsh = 0;
 }

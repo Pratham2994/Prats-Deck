@@ -65,7 +65,11 @@ static const App APPS[] = {
 };
 static const int NAPPS = sizeof(APPS) / sizeof(APPS[0]);
 
-#ifdef DECK_USB_TEST
+// A build with -DDECK_TEST cannot lock the board. If the firmware hangs, or if no PC sees
+// it on USB 12 s after start-up, the deck goes to boot mode by itself, where a new firmware
+// can be flashed with no press of the BOOTSEL button. Use it to try a change that could break
+// USB or crash. Do not use it for the firmware you keep: on a charger it would go to boot mode.
+#ifdef DECK_TEST
 extern "C" bool tud_mounted(void);             // TinyUSB: the PC has set the deck up as a USB device
 #endif
 
@@ -175,6 +179,10 @@ static void homeButton(uint16_t *fb, uint32_t now) {
 
 // ---------- Main ----------
 void setup() {
+#ifdef DECK_TEST
+  if (rp2040.getResetReason() == RP2040::WDT_RESET) rp2040.rebootToBootloader();   // it hung: wait for a new firmware
+  rp2040.wdt_begin(5000);
+#endif
   Serial.begin(115200);
   Keyboard.begin();
   Mouse.begin();
@@ -202,9 +210,8 @@ void loop() {
   float dt = constrain((us - lastUs) / 1e6f, 0.001f, 0.1f);
   lastUs = us;
 
-#ifdef DECK_USB_TEST
-  // For a test of a change to the USB set-up. No PC after 12 s means that USB is broken:
-  // go to boot mode, where a new firmware can be flashed with no button press.
+#ifdef DECK_TEST
+  rp2040.wdt_reset();                          // a hang stops this, and the watchdog restarts the deck
   if (now > 12000 && !tud_mounted()) rp2040.rebootToBootloader();
 #endif
   lcdWait();                                   // previous frame finished sending
@@ -231,13 +238,16 @@ void loop() {
   profAcc[P_PRESENT] += p2 - p1;
   profAcc[P_APP] += micros() - p2;
   if (now - fpsT >= 1000) {
-    static const char *const PN[P_COUNT] = {"wait", "present", "app", "logic", "room", "props", "cat", "fx", "stats", "msg", "dock"};
+    static const char *const PN[P_COUNT] = {"wait", "present", "app", "logic", "room", "props", "build", "cat", "fx", "stats", "msg", "dock"};
     Serial.printf("PROF app=%d fps=%d sync=%d", cur, (int)(frames * 1000 / (now - fpsT)), lcdSync);
     for (int i = 0; i < P_COUNT; i++) {
       if (profAcc[i]) Serial.printf(" %s=%lu", PN[i], (unsigned long)(profAcc[i] / frames));
       profAcc[i] = 0;
     }
-    Serial.printf("\n");
+    // work shared with core 1: the time of core 0's part, of core 1's part, and core 0's wait for core 1
+    Serial.printf(" core0=%lu core1=%lu wait1=%lu\n", (unsigned long)(shareOwn / frames), (unsigned long)(shareOther / frames),
+                  (unsigned long)(shareWait / frames));
+    shareOwn = shareWait = shareOther = 0;
     static int profSec = 0;                    // DECK_PROF=-2: go through all the apps, 4 s each
     if (DECK_PROF == -2 && ++profSec % 4 == 0) openApp(cur + 1 >= NAPPS ? -1 : cur + 1);
   }

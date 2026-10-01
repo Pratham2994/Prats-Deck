@@ -8,6 +8,7 @@
 #include <hardware/clocks.h>
 #include <hardware/gpio.h>
 #include "fonts/inter.h"
+#include "twocore.h"
 
 #define PIN_DC 8
 #define PIN_CS 9
@@ -37,7 +38,7 @@ static bool sending = false;
 // Build with -DDECK_PROF=<app number> (-1 = home page). The deck then opens that app at
 // start-up and prints the average time of each stage of a frame (microseconds) on USB serial,
 // once a second. Without the flag, the marks compile to nothing.
-enum { P_WAIT, P_PRESENT, P_APP, P_LOGIC, P_ROOM, P_PROPS, P_CAT, P_FX, P_STATS, P_MSG, P_DOCK, P_COUNT };
+enum { P_WAIT, P_PRESENT, P_APP, P_LOGIC, P_ROOM, P_PROPS, P_BUILD, P_CAT, P_FX, P_STATS, P_MSG, P_DOCK, P_COUNT };
 #ifdef DECK_PROF
 static uint32_t profAcc[P_COUNT], profT = 0;
 #define PROF_START() (profT = micros())
@@ -380,26 +381,66 @@ static uint16_t hsv(int h, int v = 255) {
 // ---------- Shapes ----------
 // Whole numbers name pixel centres. Curved and slanted edges are smoothed: an edge pixel
 // is mixed with what is under it by how much of it the shape covers.
+
+// The row window. A processor core draws only inside its own window of rows. Normally that
+// is the whole screen. When the two cores draw one picture together (drawOnBothCores), each
+// has a part of it. All the drawing functions of this file keep to the window.
+#ifdef ARDUINO_ARCH_RP2040
+#define THIS_CORE get_core_num()
+#else
+#define THIS_CORE 0
+#endif
+static int rowLo[2] = {0, 0}, rowHi[2] = {H, H};
+static inline bool rowOk(int y) {
+  int c = THIS_CORE;
+  return y >= rowLo[c] && y < rowHi[c];
+}
+
+// Run draw(arg) on both cores at once: core 0 draws the rows above `split`, core 1 the rest.
+// draw must only draw. It must not change any data, and all that it draws must go through
+// the functions of this file (or look at rowOk itself).
+struct SplitJob {
+  void (*draw)(void *);
+  void *arg;
+  int split;
+};
+static void splitPart(void *job, int part) {
+  const SplitJob *j = (const SplitJob *)job;
+  int c = THIS_CORE;
+  rowLo[c] = part ? j->split : 0;
+  rowHi[c] = part ? H : j->split;
+  j->draw(j->arg);
+  rowLo[c] = 0;
+  rowHi[c] = H;
+}
+// The result is how many microseconds core 0's part took more than core 1's (see evenShare).
+static int drawOnBothCores(void (*draw)(void *), void *arg, int split) {
+  SplitJob j = {draw, arg, split};
+  return onBothCores(splitPart, &j);
+}
+
 static inline void pixel(uint16_t *fb, int x, int y, uint16_t col) {
-  if ((unsigned)x < (unsigned)W && (unsigned)y < (unsigned)H) fb[y * W + x] = col;
+  if ((unsigned)x < (unsigned)W && rowOk(y)) fb[y * W + x] = col;
 }
 
 // pixel mixed over the picture. a: 0 (nothing) .. 1 (solid)
 static inline void pixelA(uint16_t *fb, int x, int y, uint16_t col, float a) {
-  if ((unsigned)x >= (unsigned)W || (unsigned)y >= (unsigned)H || a <= 0.02f) return;
+  if ((unsigned)x >= (unsigned)W || !rowOk(y) || a <= 0.02f) return;
   uint16_t &p = fb[y * W + x];
   p = a >= 0.98f ? col : blend(p, col, (int)(a * 256));
 }
 
 static void fill(uint16_t *fb, uint16_t col) {
-  for (int i = 0; i < W * H; i++) fb[i] = col;
+  int c = THIS_CORE;
+  for (int i = rowLo[c] * W; i < rowHi[c] * W; i++) fb[i] = col;
 }
 
 static void fillRect(uint16_t *fb, int x, int y, int w, int h, uint16_t col) {
+  const int c = THIS_CORE, lo = rowLo[c], hi = rowHi[c];
   if (x < 0) { w += x; x = 0; }
-  if (y < 0) { h += y; y = 0; }
+  if (y < lo) { h += y - lo; y = lo; }
   if (x + w > W) w = W - x;
-  if (y + h > H) h = H - y;
+  if (y + h > hi) h = hi - y;
   if (w <= 0 || h <= 0) return;
   for (int j = 0; j < h; j++) {
     uint16_t *p = fb + (y + j) * W + x;
@@ -409,10 +450,11 @@ static void fillRect(uint16_t *fb, int x, int y, int w, int h, uint16_t col) {
 
 // darken a box so text on top of a busy background stays readable
 static void shadeRect(uint16_t *fb, int x, int y, int w, int h, bool quarter = false) {
+  const int c = THIS_CORE, lo = rowLo[c], hi = rowHi[c];
   if (x < 0) { w += x; x = 0; }
-  if (y < 0) { h += y; y = 0; }
+  if (y < lo) { h += y - lo; y = lo; }
   if (x + w > W) w = W - x;
-  if (y + h > H) h = H - y;
+  if (y + h > hi) h = hi - y;
   for (int j = 0; j < h; j++) {
     uint16_t *p = fb + (y + j) * W + x;
     for (int i = 0; i < w; i++) p[i] = quarter ? dim4(p[i]) : dim(p[i]);
@@ -448,9 +490,9 @@ static void gradRect(uint16_t *fb, int x, int y, int w, int h, uint16_t top, uin
   int x0 = max(x, 0), x1 = min(x + w, W);
   int tr = (top >> 11) << 3, tg = ((top >> 5) & 63) << 2, tb = (top & 31) << 3;
   int br = (bottom >> 11) << 3, bg = ((bottom >> 5) & 63) << 2, bb = (bottom & 31) << 3;
-  for (int j = 0; j < h; j++) {
+  const int c = THIS_CORE;
+  for (int j = max(0, rowLo[c] - y); j < min(h, rowHi[c] - y); j++) {
     int py = y + j;
-    if (py < 0 || py >= H) continue;
     int k = h > 1 ? j * 256 / (h - 1) : 0;
     // colour in 1/16 steps of 8-bit, so the dither has something to work with
     int r = (tr * 16) + (br - tr) * k / 16, g = (tg * 16) + (bg - tg) * k / 16, b = (tb * 16) + (bb - tb) * k / 16;
@@ -470,6 +512,8 @@ static void gradRect(uint16_t *fb, int x, int y, int w, int h, uint16_t top, uin
 // Smooth line with round ends, `width` pixels wide.
 static void strokeLine(uint16_t *fb, float x0, float y0, float x1, float y1, float width, uint16_t col) {
   float dx = x1 - x0, dy = y1 - y0, len2 = dx * dx + dy * dy, hw = width * 0.5f;
+  const int c = THIS_CORE, lo = rowLo[c], hi = rowHi[c];
+  if (fmaxf(y0, y1) + hw + 2 < lo || fminf(y0, y1) - hw - 2 >= hi) return;   // no part of it is in the window
   const float ilen2 = len2 > 1e-6f ? 1 / len2 : 0;
   auto plot = [&](int px, int py) {
     float t = ((px - x0) * dx + (py - y0) * dy) * ilen2;
@@ -481,15 +525,21 @@ static void strokeLine(uint16_t *fb, float x0, float y0, float x1, float y1, flo
   if (fabsf(dx) >= fabsf(dy)) {                // walk along x, look at a few pixels across
     float xa = fminf(x0, x1), xb = fmaxf(x0, x1), slope = fabsf(dx) > 1e-6f ? dy / dx : 0;
     float reach = ext * sqrtf(1 + slope * slope) + 1;
-    for (int px = max(0, (int)floorf(xa - ext)); px <= min(W - 1, (int)ceilf(xb + ext)); px++) {
+    int pa = max(0, (int)floorf(xa - ext)), pb = min(W - 1, (int)ceilf(xb + ext));
+    if (fabsf(slope) > 0.01f) {                // only the columns where the line is near the rows of the window
+      float u = x0 + (lo - reach - 1 - y0) / slope, v = x0 + (hi + reach - y0) / slope;
+      pa = max(pa, (int)floorf(fminf(u, v) - ext - 2));
+      pb = min(pb, (int)ceilf(fmaxf(u, v) + ext + 2));
+    }
+    for (int px = pa; px <= pb; px++) {
       float cx = px < xa ? xa : (px > xb ? xb : px);
       float yc = y0 + (cx - x0) * slope;
-      for (int py = (int)floorf(yc - reach); py <= (int)ceilf(yc + reach); py++) plot(px, py);
+      for (int py = max(lo, (int)floorf(yc - reach)); py <= min(hi - 1, (int)ceilf(yc + reach)); py++) plot(px, py);
     }
   } else {
     float ya = fminf(y0, y1), yb = fmaxf(y0, y1), slope = dx / dy;
     float reach = ext * sqrtf(1 + slope * slope) + 1;
-    for (int py = max(0, (int)floorf(ya - ext)); py <= min(H - 1, (int)ceilf(yb + ext)); py++) {
+    for (int py = max(lo, (int)floorf(ya - ext)); py <= min(hi - 1, (int)ceilf(yb + ext)); py++) {
       float cy = py < ya ? ya : (py > yb ? yb : py);
       float xc = x0 + (cy - y0) * slope;
       for (int px = (int)floorf(xc - reach); px <= (int)ceilf(xc + reach); px++) plot(px, py);
@@ -509,7 +559,8 @@ static void thickLine(uint16_t *fb, int x0, int y0, int x1, int y1, uint16_t col
 
 static void fillCircle(uint16_t *fb, int cx, int cy, int r, uint16_t col) {
   const float R = r + 0.5f;
-  for (int dy = -r - 1; dy <= r + 1; dy++) {
+  const int c = THIS_CORE;
+  for (int dy = max(-r - 1, rowLo[c] - cy); dy <= min(r + 1, rowHi[c] - 1 - cy); dy++) {
     float out2 = (R + 0.5f) * (R + 0.5f) - dy * dy;
     if (out2 <= 0) continue;
     float in2 = (R - 0.5f) * (R - 0.5f) - dy * dy;
@@ -525,7 +576,8 @@ static void fillCircle(uint16_t *fb, int cx, int cy, int r, uint16_t col) {
 
 // circle outline, 1 px
 static void circle(uint16_t *fb, int cx, int cy, int r, uint16_t col) {
-  for (int dy = -r - 1; dy <= r + 1; dy++)
+  const int c = THIS_CORE;
+  for (int dy = max(-r - 1, rowLo[c] - cy); dy <= min(r + 1, rowHi[c] - 1 - cy); dy++)
     for (int dx = -r - 1; dx <= r + 1; dx++) {
       float d = fabsf(sqrtf((float)(dx * dx + dy * dy)) - r);
       if (d < 1) pixelA(fb, cx + dx, cy + dy, col, 1 - d);
@@ -537,6 +589,7 @@ static void fillRoundRect(uint16_t *fb, int x, int y, int w, int h, int r, uint1
   r = max(0, min(r, min(w, h) / 2));
   fillRect(fb, x, y + r, w, h - 2 * r, col);
   for (int j = 0; j < r; j++) {
+    if (!rowOk(y + j) && !rowOk(y + h - 1 - j)) continue;
     float dy = r - 0.5f - j;                   // this row's distance from the corner centre
     float out2 = (r + 0.5f) * (r + 0.5f) - dy * dy, in2 = (r - 0.5f) * (r - 0.5f) - dy * dy;
     // i counts pixels in from the left edge. Its distance from the corner centre is r - 0.5 - i
@@ -561,6 +614,7 @@ static void fillRoundRectV(uint16_t *fb, int x, int y, int w, int h, int r, uint
   if (w <= 0 || h <= 0) return;
   r = max(0, min(r, min(w, h) / 2));
   for (int j = 0; j < h; j++) {
+    if (!rowOk(y + j)) continue;
     uint16_t col = blend(top, bottom, h > 1 ? j * 256 / (h - 1) : 0);
     int k = j < r ? j : (j >= h - r ? h - 1 - j : -1);   // row inside a corner, or -1
     if (k < 0) {
@@ -605,7 +659,8 @@ static void roundRect(uint16_t *fb, int x, int y, int w, int h, int r, uint16_t 
 static void fillTriangle(uint16_t *fb, int x0, int y0, int x1, int y1, int x2, int y2, uint16_t col) {
   const float vx[3] = {(float)x0, (float)x1, (float)x2}, vy[3] = {(float)y0, (float)y1, (float)y2};
   int minY = min(y0, min(y1, y2)), maxY = max(y0, max(y1, y2));
-  for (int py = max(minY, 0); py <= min(maxY, H - 1); py++) {
+  const int c = THIS_CORE;
+  for (int py = max(minY, rowLo[c]); py <= min(maxY, rowHi[c] - 1); py++) {
     float l[2], r[2];
     bool ok[2];
     for (int k = 0; k < 2; k++) {              // two heights per row, for smooth slanted edges
@@ -664,6 +719,7 @@ static void arc(uint16_t *fb, int cx, int cy, int r0, int r1, float a0, float a1
   const int lo = r0 > 0 ? (2 * r0 - 1) * (2 * r0 - 1) : -1, hi = (2 * r1 + 1) * (2 * r1 + 1);
   const int slo = (2 * r0 + 1) * (2 * r0 + 1), shi = (2 * r1 - 1) * (2 * r1 - 1);
   for (int y = -r1 - 1; y <= r1 + 1; y++) {
+    if (!rowOk(cy + y)) continue;
     for (int x = -r1 - 1; x <= r1 + 1; x++) {
       int d4 = 4 * (x * x + y * y);
       if (d4 <= lo || d4 >= hi) continue;
@@ -711,7 +767,7 @@ static int text(uint16_t *fb, const Font *f, const char *s, int x, int y, uint16
     int n = 0;
     for (int yy = 0; yy < g.h; yy++) {
       int py = y + g.yo + yy;
-      if ((unsigned)py >= (unsigned)H) {
+      if (!rowOk(py)) {
         n += g.w;
         continue;
       }

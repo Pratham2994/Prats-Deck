@@ -104,6 +104,7 @@ The script finds the Pico by itself, on any COM port. On Windows it also sends t
 - `Prats-Deck.ino`: home page and app list
 - `config.example.h`: template for your settings (`config.h`)
 - `src/display.h`: screen, tear-free sending, smooth shapes, text
+- `src/twocore.h`: gives the second processor core a part of the heavy drawing
 - `src/touch.h`: touch, calibration, stylus filtering
 - `src/glow.h`: shared glow layer and sparks
 - `src/core.h`: shared look (cards, header, buttons)

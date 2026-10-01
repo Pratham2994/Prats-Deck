@@ -107,7 +107,7 @@ static void sky(uint16_t *fb, int x, int y, int w, int h, const Env &e, float t)
   uint16_t top, bottom;
   skyColours(e, top, bottom);
   gradRect(fb, x, y, w, h, top, bottom);
-  auto clipIn = [&](int px, int py) { return px >= x && px < x + w && py >= y && py < y + h; };
+  auto clipIn = [&](int px, int py) { return px >= x && px < x + w && py >= y && py < y + h && rowOk(py); };
   if (e.night()) {
     for (int k = 0; k < 18; k++) {             // stars
       int sx = x + (k * 53 + 17) % w, sy = y + (k * 37 + 11) % (h * 2 / 3);
@@ -124,7 +124,7 @@ static void sky(uint16_t *fb, int x, int y, int w, int h, const Env &e, float t)
     int r = min(w, h) / 8 + 2;
     for (int k = 3; k >= 1; k--) {             // soft glow
       int rr = r + k * 4;
-      for (int j = -rr; j <= rr; j++)
+      for (int j = max(-rr, rowLo[THIS_CORE] - sy); j <= min(rr, rowHi[THIS_CORE] - 1 - sy); j++)
         for (int i = -rr; i <= rr; i++)
           if (i * i + j * j <= rr * rr && clipIn(sx + i, sy + j)) {
             uint16_t &p = fb[(sy + j) * W + sx + i];
@@ -140,7 +140,7 @@ static void sky(uint16_t *fb, int x, int y, int w, int h, const Env &e, float t)
     float cx = x + fmodf(k * 61 + t * (4 + k * 1.5f), w + 60) - 30, cy = y + 10 + (k * 23) % max(h / 2, 1);
     for (int b = 0; b < 3; b++) {
       int bx = (int)cx + (b - 1) * 11, by = (int)cy - (b == 1 ? 5 : 0), br = b == 1 ? 11 : 8;
-      for (int j = -br; j <= br; j++)
+      for (int j = max(-br, rowLo[THIS_CORE] - by); j <= min(br, rowHi[THIS_CORE] - 1 - by); j++)
         for (int i = -br; i <= br; i++)
           if (i * i + j * j <= br * br && clipIn(bx + i, by + j)) fb[(by + j) * W + bx + i] = cc;
     }
@@ -163,6 +163,7 @@ static void sky(uint16_t *fb, int x, int y, int w, int h, const Env &e, float t)
   }
   if (e.wx == W_FOG) {
     for (int j = 0; j < h; j += 2) {
+      if (!rowOk(y + j)) continue;
       int band = (int)(sinf(j * 0.15f + t * 0.5f) * 40 + 60);
       for (int i = 0; i < w; i++) {
         uint16_t &p = fb[(y + j) * W + x + i];
@@ -175,6 +176,7 @@ static void sky(uint16_t *fb, int x, int y, int w, int h, const Env &e, float t)
 
 // roofs and trees far away, along the bottom of a window
 static void skyline(uint16_t *fb, int x, int y, int w, const Env &e) {
+  if (y - 16 >= rowHi[THIS_CORE] || y <= rowLo[THIS_CORE]) return;   // it is 15 rows high, over y
   uint16_t far = e.night() ? rgb(20, 24, 44) : rgb(150, 170, 190), near = e.night() ? rgb(14, 22, 30) : rgb(96, 140, 104);
   for (int i = 0; i < w; i++) {
     int hb = 6 + ((i / 11) * 7) % 9;                         // blocks of flats
@@ -205,6 +207,7 @@ static void window(uint16_t *fb, const Env &e, float t) {
   for (int s = 0; s < 2; s++) {
     int cx = s ? x + w + 2 : x - 16;
     for (int j = -10; j < h + 18; j++) {
+      if (!rowOk(y + j)) continue;
       int cw = 14 - (j > h / 2 ? (j - h / 2) / 6 : 0);
       for (int i = 0; i < cw; i++) {
         int px = (s ? cx : cx + 14 - cw) + i;
@@ -290,7 +293,7 @@ static void fountain(uint16_t *fb, float t) {
   strokeLine(fb, 223, 124, 223, 150, 1.4f, rgb(50, 50, 56));
   strokeLine(fb, 223, 150, x + 2, 166, 1.4f, rgb(50, 50, 56));
   // glow on the floor, then the box
-  for (int j = -9; j <= 9; j++)
+  for (int j = max(-9, rowLo[THIS_CORE] - 174); j <= min(9, rowHi[THIS_CORE] - 1 - 174); j++)
     for (int i = -34; i <= 34; i++) {
       float d = (i * i) / 1156.0f + (j * j) / 81.0f;
       if (d < 1) pixelA(fb, FOUNTAIN_X + i, 174 + j, rgb(60, 110, 255), (1 - d) * 0.45f);
@@ -477,13 +480,32 @@ static void balcony(uint16_t *fb, const Env &e, float t) {
   }
 }
 
-static void draw(uint16_t *fb, int which, const Env &e, float t) {
+static void drawRoom(uint16_t *fb, int which, const Env &e, float t) {
   switch (which) {
     case DINING: dining(fb, e, t); break;
     case BEDROOM: bedroom(fb, e, t); break;
     case BALCONY: balcony(fb, e, t); break;
     default: living(fb, e, t);
   }
+}
+
+// The room is drawn by both processor cores at once: one draws the rows above roomSplit, the
+// other the rest. All the room code above only draws, through the functions of display.h.
+// The split row moves by itself to where the two parts take the same time.
+static float roomSplit = 120;
+struct DrawArg {
+  uint16_t *fb;
+  int which;
+  const Env *e;
+  float t;
+};
+static void drawPart(void *arg) {
+  const DrawArg *a = (const DrawArg *)arg;
+  drawRoom(a->fb, a->which, *a->e, a->t);
+}
+static void draw(uint16_t *fb, int which, const Env &e, float t) {
+  DrawArg a = {fb, which, &e, t};
+  roomSplit = evenShare(roomSplit, drawOnBothCores(drawPart, &a, (int)roomSplit), 40, 200);
 }
 
 // ---------- Props (smooth shapes) ----------

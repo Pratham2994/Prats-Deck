@@ -760,6 +760,7 @@ static void draw(uint16_t *fb, const Look &L) {
     case FLOP: flop(L); break;
     default: front(L);
   }
+  PROF_MARK(P_BUILD);                          // the time to make her shapes. The rest is the drawing
   cg::render(fb);
 }
 
