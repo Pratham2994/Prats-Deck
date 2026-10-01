@@ -99,6 +99,8 @@ Settings shows the result:
 - **off:** you switched it off.
 - **not available:** your screen gives no answer. The firmware then sends pictures the old way.
 
+The mode costs a little speed: about 41 pictures a second in place of 46 (Chindi: 37 in place of 41). Switch it off in Settings if you like the speed more.
+
 ## Wi-Fi (Clock app and home page)
 
 Set `WIFI_SSID` and `WIFI_PASS` in `config.h`, then upload again. The Pico 2 W supports 2.4 GHz networks only.

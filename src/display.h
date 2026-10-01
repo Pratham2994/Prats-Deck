@@ -185,6 +185,9 @@ static int lcdScanLine() {
 
 // Find out if the screen reports its scan line. A true answer climbs steadily with time and
 // drops back to zero once per redraw. Noise does not. Sets syncFound, syncLines, syncHz.
+// Measured on the real screen: the count climbs 15 lines each millisecond up to about 330.
+// Between two redraws it waits at 1 for about 1.5 ms and then jumps on. The first read after
+// the change of the redraw rate is not true.
 static void lcdSyncProbe() {
 #ifdef SIM_FORCE_SYNC
   syncFound = true;
@@ -201,10 +204,10 @@ static void lcdSyncProbe() {
   for (int pin = 0; pin < 2 && !syncFound; pin++)
     for (int skip = 0; skip <= 9 && !syncFound; skip++) {
       const uint32_t *raw = pin ? ro : rm;
-      int good = 0, wraps = 0, top = 0, prev = syncValue(raw[0], skip);
+      int good = 0, gap = 0, wraps = 0, top = 0, prev = syncValue(raw[1], skip);
       long lines = 0, span = 0;
       bool bad = prev < 0;
-      for (int i = 1; i < N && !bad; i++) {
+      for (int i = 2; i < N && !bad; i++) {
         int v = syncValue(raw[i], skip);
         if (v < 0) {
           bad = true;
@@ -217,11 +220,14 @@ static void lcdSyncProbe() {
           good++;
           lines += dv;
           span += dt;
+        } else if (v <= 24) {
+          gap++;                               // the wait between two redraws, and the jump after it
         }
         if (v > top) top = v;
         prev = v;
       }
-      if (bad || wraps < 1 || wraps > 3 || good < N - 6 || top < 300 || top > 420 || span <= 0) continue;
+      // of the N - 2 steps, all but 2 must be a steady climb, a wait between redraws, or a drop to zero
+      if (bad || wraps < 1 || wraps > 8 || good + gap + wraps < N - 4 || good < N / 2 || top < 300 || top > 420 || span <= 0) continue;
       syncFound = true;
       syncOnMosi = pin;
       syncSkip = skip;
@@ -251,11 +257,23 @@ static void lcdSyncWait() {
 }
 
 // Landscape picture -> the screen's own order. Screen row r, column c = landscape (r, 239 - c).
-static void lcdTurn(const uint16_t *src, uint16_t *dst) {
-  for (int r = 0; r < W; r++) {
-    const uint16_t *s = src + (H - 1) * W + r;
+// The two processor cores do one half of the screen rows each: it takes 2.5 ms, not 5.
+struct TurnJob {
+  const uint16_t *src;
+  uint16_t *dst;
+};
+static void lcdTurnPart(void *job, int part) {
+  const TurnJob *j = (const TurnJob *)job;
+  const int r0 = part ? W / 2 : 0, r1 = part ? W : W / 2;
+  uint16_t *dst = j->dst + r0 * H;
+  for (int r = r0; r < r1; r++) {
+    const uint16_t *s = j->src + (H - 1) * W + r;
     for (int c = 0; c < H; c++, s -= W) *dst++ = *s;
   }
+}
+static void lcdTurn(const uint16_t *src, uint16_t *dst) {
+  TurnJob j = {src, dst};
+  onBothCores(lcdTurnPart, &j);
 }
 
 // Turn tear-free mode on or off. It stays off if the screen does not answer.
