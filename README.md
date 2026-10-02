@@ -75,7 +75,7 @@ Her needs (food, energy, fun, clean, love) change only while the Pico is on. The
 
 A tap on the open floor calls her over.
 
-**The dock:** Feed (kibble, fish, treats), Play (laser, feather, yarn, mini-games), Clean (brush her), Sleep, More.
+**The dock:** Feed (kibble, fish, treats), Play (laser, feather, yarn, mini-games), Clean (brush her), Sleep, More. Sleep puts the light out. While she sleeps, the button says Wake: tap it and she gets up, and the light comes back.
 
 **The game**
 

@@ -331,6 +331,36 @@ int main() {
   forceAct(IDLE, 30);
   step(20);
 
+  // ---- Sleep in the dock puts the light out: you can wake her, and the light comes back ----
+  {
+    float energy0 = P.energy, hunger0 = P.hunger;
+    P.energy = 10;                             // so tired that a tap on her does not wake her
+    dockTap(3);
+    step(400);
+    shot("c24a_asleep");
+    fails += check(C.act == SLEEPING && C.stage == 2 && lightsOff, "Sleep in the dock: she sleeps and the light goes out");
+    dockTap(3);                                // the same button, which now says Wake
+    step(150);
+    fails += check(C.act != SLEEPING && !lightsOff, "the same button wakes her, and the light comes back");
+    step(600);
+    fails += check(C.act != SLEEPING, "she stays up after you wake her, although she is tired");
+    P.hunger = 30;
+    forceAct(IDLE, 30);
+    step(5);
+    dockTap(3);
+    step(400);
+    dockTap(0);
+    step(10);
+    sheetTile(0, 3, 1);
+    step(40);
+    fails += check(C.act == EATING && !lightsOff, "food gets her up too, and the light comes back");
+    P.energy = energy0;
+    P.hunger = hunger0;
+    bowlX = -1;
+    forceAct(IDLE, 30);
+    step(20);
+  }
+
   // ---- sheets and the album ----
   dockTap(4);
   step(10);

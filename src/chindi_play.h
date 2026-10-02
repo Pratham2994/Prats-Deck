@@ -23,6 +23,18 @@ static float needIn = 15;
 
 static bool lateNight() { return E.timeKnown && (E.hour >= 22.5f || E.hour < 6); }
 
+// You woke her: she gets up now, and for some minutes she does not go back to sleep by
+// herself, however tired she is and however late it is.
+static const uint32_t WOKEN_MS = 5 * 60000UL;
+static uint32_t wokenAt = 0;
+static bool woken = false;
+
+static void wakeUp() {
+  if (C.stage < 3) { C.stage = 3; C.t = 0; }
+  woken = true;
+  wokenAt = millis();
+}
+
 // a bird lands on the window sill (or the balcony railing) for her to watch
 static float birdY = 0;
 static void callBird(uint32_t now, uint32_t ms) {
@@ -55,7 +67,8 @@ static void pickGift() {
 }
 
 static void chooseNext(uint32_t now) {
-  if (P.energy < 18 || (lateNight() && P.energy < 90)) { setAct(SLEEPING, 1e9f); return; }
+  if (woken && now - wokenAt > WOKEN_MS) woken = false;
+  if (!woken && (P.energy < 18 || (lateNight() && P.energy < 90))) { setAct(SLEEPING, 1e9f); return; }
   if (giftItem < 0 && (giftOwed || ((int32_t)(now - giftNext) >= 0 && P.love > 55))) {
     giftOwed = false;
     giftNext = now + random(30, 60) * 60000UL;
@@ -849,8 +862,7 @@ static void onTap(uint8_t reg) {
       say("mrrr...", IC_ZZZ, 1500);            // grumpy, goes back to sleep
       C.eyeT = 0.4f;
     } else {
-      C.stage = 3;
-      C.t = 0;
+      wakeUp();
     }
     return;
   }
@@ -1028,6 +1040,10 @@ static void feed(uint8_t kind) {
 }
 
 static void sleepCmd() {
+  if (C.act == SLEEPING) {                     // the button says Wake now
+    wakeUp();
+    return;
+  }
   if (P.energy > 85 && !lateNight()) {
     setAct(REFUSE, 1.8f);
     say("not sleepy!", IC_EXCL, 1800);
@@ -1657,7 +1673,7 @@ static void dock(uint16_t *fb) {
     bool pressed = T.down && inBox(T.startX, T.startY, cx - 25, y0, 50, h) && inBox(T.x, T.y, cx - 25, y0, 50, h);
     if (pressed) fillRoundRect(fb, cx - 22, y0 + 3, 44, h - 6, 12, blend(CARD, ACCENT, 110));
     icon(fb, IC[k], cx, y0 + 12, pressed ? WHITE : (k == 0 ? ACCENT : rgb(226, 229, 242)));
-    tinyCenter(fb, LB[k], cx, y0 + 23, pressed ? WHITE : MUTED);
+    tinyCenter(fb, k == 3 && C.act == SLEEPING && C.stage < 3 ? "Wake" : LB[k], cx, y0 + 23, pressed ? WHITE : MUTED);
     if (tapIn(cx - 25, y0, 50, h)) {
       sheetAnim = 0;
       if (k == 0) sheet = SH_FEED;
@@ -1858,6 +1874,12 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
     C.aux = 0;
   }
   musicWas = pcMusic;
+
+  // the light that Sleep put out comes back when she is up again, however she got up
+  // (food, a toy, a game), not only when she wakes by herself
+  static bool sleptWas = false;
+  if (sleptWas && C.act != SLEEPING) lightsOff = false;
+  sleptWas = C.act == SLEEPING;
 
   bool ui = (T.down || T.released) && onUI(T.startX, T.startY);
 
