@@ -16,6 +16,13 @@ These pictures come from the simulator (`tools/sim`), which runs the real code o
 | ![Snake](docs/screens/snake.png) | ![2048](docs/screens/2048.png) | ![Trackpad](docs/screens/trackpad.png) |
 | Snake | 2048 | Trackpad |
 
+## Under it
+
+- **No libraries.** The screen driver, the touch filter, the fonts and all the drawing are in this repo.
+- **Fast.** Chindi first drew at 5 frames a second. With faster drawing code and both processor cores, she now draws at about 40.
+- **No tearing.** The firmware reads which line the screen is drawing, and sends each picture only when it cannot cross it.
+- **Tested without a stylus.** `tools/sim` runs the same code on a PC and saves screenshots. `tools/hwtest.py` taps the real deck over USB and checks every app.
+
 ## Set up
 
 1. Copy `config.example.h` to `config.h`. Put your Wi-Fi name and password in it. `config.h` is not stored in git, so your password stays on your PC.
