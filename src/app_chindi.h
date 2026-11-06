@@ -737,7 +737,11 @@ static void tick(uint32_t now, float dt) {
     kbNextChar = now + random(90, 230);
   }
 
-  if (dirty && now - lastSave > 5 * 60000UL) saveNow();
+  // Her needs change every frame, so there is nearly always something to save. Each save
+  // erases a 4 KB flash sector, and flash lasts about 100,000 erases: a save every 5 minutes
+  // would use that up in about a year. Every 30 minutes it lasts about 5 years. Level ups,
+  // wishes, gifts, photos, games and leaving her room still save at once.
+  if (dirty && now - lastSave > 30 * 60000UL) saveNow();
 }
 
 // ---------- Home screen helpers ----------

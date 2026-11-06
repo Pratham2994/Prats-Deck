@@ -246,6 +246,8 @@ int main() {
       bool turn;
       if (S.dx != 0) turn = hx == fx || (S.dx > 0 ? fx < hx || hx >= gw - 2 : fx > hx || hx <= 1);
       else turn = hy == fy || (S.dy > 0 ? fy < hy || hy >= gh - 2 : fy > hy || hy <= 1);
+      // the food is straight ahead: go on and eat it, also next to a wall
+      if (S.dx != 0 ? hy == fy && (S.dx > 0) == (fx > hx) : hx == fx && (S.dy > 0) == (fy > hy)) turn = false;
       if (!S.started) turn = true;
       if (hold > 0) hold--;                       // the stylus stays down for 3 frames
       else up();

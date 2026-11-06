@@ -102,13 +102,14 @@ static void parse(char *s) {
   if (strncmp(s, "NP ", 3) == 0) { parseSong(s + 3); return; }
   if (strncmp(s, "PC ", 3) != 0) return;
   char *p = s + 3;
+  float v[NF];
   for (int i = 0; i < NF; i++) {
     char *end;
-    float f = strtof(p, &end);
+    v[i] = strtof(p, &end);
     if (end == p) return;                      // malformed line: ignore it all
-    S.v[i] = f;
     p = end;
   }
+  memcpy(S.v, v, sizeof(v));
   for (int g = 0; g < 3; g++) S.hist[g][S.histHead] = (uint8_t)constrain(S.v[g], 0, 100);
   S.histHead = (S.histHead + 1) % HISTN;
   if (S.histCount < HISTN) S.histCount++;
