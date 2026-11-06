@@ -237,7 +237,9 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
   char date[48] = "";
   int sec = 0;
   bool pm = false;
-  if (net::timeValid()) {
+  // the internet time is UTC: show it only when the time zone is known too (as the home page does)
+  const bool timeOk = net::timeValid() && tzKnown;
+  if (timeOk) {
     time_t t = time(nullptr) + tzOffset;
     struct tm tm;
     gmtime_r(&t, &tm);
@@ -253,10 +255,10 @@ static void frame(uint16_t *fb, float dt, uint32_t now) {
   }
   int tw = textWidth(CLOCKFACE, hm);
   int tx = (W - tw) / 2;
-  uint16_t tc = net::timeValid() ? rgb(232, 244, 255) : rgb(70, 80, 100);
+  uint16_t tc = timeOk ? rgb(232, 244, 255) : rgb(70, 80, 100);
   shadeRect(fb, 0, 14, W, 128);                // the live background is busy: calm it behind the time
   text(fb, CLOCKFACE, hm, tx, 104, tc);
-  if (!CLOCK_24H && net::timeValid()) tiny(fb, pm ? "PM" : "AM", tx + tw + 2, 24, tc);
+  if (!CLOCK_24H && timeOk) tiny(fb, pm ? "PM" : "AM", tx + tw + 2, 24, tc);
   fillRect(fb, tx, 112, tw, 2, rgb(25, 30, 40));
   fillRect(fb, tx, 112, tw * sec / 59, 2, rgb(80, 180, 255));
   if (date[0]) textCenter(fb, SMALL, date, W / 2, 134, WHITE);
